@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>swarm-build · a page that builds itself</title>
+<meta name="description" content="Demo of swarm-build: labelled agent cursors build the page in front of you.">
+<!-- 1 · The head snippet: decides before first paint whether this visit builds. -->
+<script>
+(function () {
+  try {
+    var d = document.documentElement;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (localStorage.getItem('swarm-build-off') === '1') return;
+    d.classList.add('swarm-js');
+    setTimeout(function () { if (!window.__swarmBuild) d.classList.remove('swarm-js'); }, 6000);
+  } catch (e) {}
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/swarm-build.css">
+<style>
+  :root { --bg: #0b0b0a; --ink: #f3f1ea; --ink-2: #c9c6bb; --muted: #8a8779; --line: rgba(243,241,234,.1); --accent: #ff6a3d; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(60% 50% at 75% 20%, rgba(255,106,61,.16), transparent 70%), var(--bg); color: var(--ink); font: 16px/1.6 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(18px, 4vw, 48px); }
+  .mono { font: 500 11px/1.4 "JetBrains Mono", ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  nav { position: sticky; top: 0; z-index: 10; display: flex; justify-content: center; padding: 18px; }
+  .pill { display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 16px; border: 1px solid var(--line); border-radius: 999px; background: rgba(16,16,14,.7); backdrop-filter: blur(16px); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .pill a { color: var(--ink); text-decoration: none; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--accent); color: #0b0b0a; font: 600 14px/1 Inter, sans-serif; text-decoration: none; cursor: pointer; transition: transform .16s ease-out; }
+  .btn:active { transform: scale(.97); }
+  .btn--ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  header.hero { min-height: calc(100svh - 76px); display: grid; align-content: end; gap: 24px; padding-bottom: 64px; }
+  .meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid var(--line); }
+  .meta div { padding: 14px 16px 14px 0; display: grid; gap: 4px; }
+  .meta div + div { padding-left: 16px; border-left: 1px solid var(--line); }
+  .meta b { font: 500 12px/1.4 "JetBrains Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
+  h1 { margin: 0; font: 400 clamp(46px, 9vw, 150px)/.92 "Instrument Serif", serif; letter-spacing: -.02em; }
+  h1 em, h2 em { font-style: italic; color: var(--accent); }
+  .foot { display: grid; grid-template-columns: 7fr 5fr; gap: 32px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .foot p { margin: 0; color: var(--ink-2); max-width: 620px; }
+  .stats { display: flex; gap: 40px; margin-top: 20px; }
+  .stats strong { display: block; font: 400 clamp(48px, 6vw, 88px)/.9 "Instrument Serif", serif; }
+  .credit { display: flex; align-items: center; gap: 10px; }
+  .credit::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #8dffb9; box-shadow: 0 0 10px #8dffb9; }
+  section { padding: 18vh 0 6vh; }
+  h2 { margin: 12px 0 28px; font: 400 clamp(38px, 6vw, 88px)/.95 "Instrument Serif", serif; letter-spacing: -.02em; }
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .card { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.02); }
+  .card h3 { margin: 0 0 8px; font: 400 26px/1.1 "Instrument Serif", serif; }
+  .card p { margin: 0; color: var(--ink-2); font-size: 15px; }
+  footer { padding: 10vh 0 14vh; display: flex; gap: 12px; flex-wrap: wrap; }
+  @media (max-width: 760px) { .meta { grid-template-columns: 1fr; } .meta div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); } .foot, .cards { grid-template-columns: 1fr; } .pill .mono { display: none; } }
+</style>
+</head>
+<body>
+<!-- 2 · Markup: data-swarm regions, data-swarm-step on what the crew builds. -->
+<nav><div class="pill" data-swarm-step="frame" data-swarm-label="nav">
+  <span class="dot" data-swarm-origin></span><a href="#top">Ada Quill</a><span class="mono">Work · Writing</span><a class="btn" href="#contact">Get in touch</a>
+</div></nav>
+
+<main id="top">
+  <header class="hero wrap" data-swarm>
+    <div class="meta" data-swarm-step="frame" data-swarm-label="profile grid">
+      <div><span class="mono">// Based in</span><b data-swarm-step="fetch">Lisbon · 38.72°N</b></div>
+      <div><span class="mono">// Status</span><b data-swarm-step="fetch">Shipping agents</b></div>
+      <div><span class="mono">// Focus</span><b data-swarm-step="fetch">AI safety + design</b></div>
+    </div>
+    <h1 data-swarm-step="type" data-swarm-attack="without>with">Building <em>agents</em><br>people can trust,<br>without the drama.</h1>
+    <div class="foot">
+      <p data-swarm-step="frame stream" data-swarm-label="bio">I'm Ada, a fictional engineer who ships AI products and then tries to break them on purpose. Everything on this page was built by a crew of agents while you watched: boxes framed, words typed, numbers checked, and one attack blocked.</p>
+      <div>
+        <a class="btn" href="#contact" data-swarm-step="frame" data-swarm-label="cta">Get in touch →</a>
+        <div class="stats">
+          <div data-swarm-step="count" data-swarm-label="stats"><strong>12</strong><span class="mono">// Models red-teamed</span></div>
+          <div data-swarm-step="count"><strong>4.8K</strong><span class="mono">// Readers</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="credit mono" data-swarm-credit hidden>Built by {agents} agents while you watched · one tried to break it</p>
+  </header>
+
+  <section class="wrap" data-swarm>
+    <span class="mono" data-swarm-step="fetch">001 / Work</span>
+    <h2 data-swarm-step="type">Systems shipped,<br>stress <em>tested</em>.</h2>
+    <div class="cards">
+      <article class="card" data-swarm-step="frame"><h3>Eval harness</h3><p>Regression suite that replays 4,000 adversarial prompts on every model bump.</p></article>
+      <article class="card" data-swarm-step="frame"><h3>Agent router</h3><p>Picks the cheapest model that still passes the task's checks.</p></article>
+      <article class="card" data-swarm-step="frame"><h3>Guardrail kit</h3><p>Input and output filters with a red-team corpus to prove they work.</p></article>
+    </div>
+  </section>
+
+  <section class="wrap" data-swarm>
+    <span class="mono" data-swarm-step="fetch">002 / Writing</span>
+    <h2 data-swarm-step="type">Notes from the <em>red team</em>.</h2>
+    <p data-swarm-step="stream" style="max-width:680px;color:var(--ink-2)">Short essays on breaking models responsibly: what failed, why it failed, and the boring fix that held up in production.</p>
+  </section>
+
+  <footer class="wrap" id="contact">
+    <button class="btn" type="button" id="replay">Watch it again</button>
+    <button class="btn btn--ghost" type="button" id="toggle"></button>
+  </footer>
+</main>
+
+<!-- 3 · Start it. -->
+<script type="module">
+  import { swarmBuild } from '../assets/swarm-build.js';
+  const swarm = swarmBuild({ once: 'always' }).start();
+  const toggle = document.getElementById('toggle');
+  const paint = () => { toggle.textContent = swarm.enabled() ? 'Turn build agents off' : 'Turn build agents on'; };
+  paint();
+  toggle.addEventListener('click', () => { swarm.setEnabled(!swarm.enabled()); paint(); });
+  document.getElementById('replay').addEventListener('click', () => swarm.replay());
+</script>
+</body>
+</html>
