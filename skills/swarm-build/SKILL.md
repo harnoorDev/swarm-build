@@ -61,6 +61,7 @@ Run it in a real browser, for example Playwright. Do a fresh context for every p
 ## Gotchas
 
 - **Clipping:** a region with `overflow: hidden` clips its cursors. Put `data-swarm` on an unclipped ancestor.
+- **Horizontal overflow:** while a build runs, the engine sets `overflow-x: clip` on `<html>` and `<body>` (`.sb-building`), so agents entering from the right never widen the page. A widened page makes mobile browsers zoom out and makes lower regions count as in view. Don't remove this.
 - **Fixed and sticky elements** (a nav) can be built. Leave them outside any region and they join the first region's build.
 - **The `hidden` attribute** loses to any CSS `display:` rule. The library forces `[data-swarm-credit][hidden]` to stay hidden, but other `hidden` elements you add can still be overridden.
 - **Gradient text** (`background-clip: text`) works, because characters stay inside the gradient parent.

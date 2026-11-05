@@ -45,7 +45,7 @@ If you change the `key` option, change `k` to match.
 | `count` | eval | Numbers count up from 0, keeping prefix, suffix and decimals (`2.2K`, `$1,200`), with a "✓ verified" chip | The step starts |
 | `reveal` | none | A plain fade | The step starts |
 
-Agents work through their own queues in parallel. Each new step starts at least 0.28 s after the previous one, and a step inside a framed element waits until the frame is done.
+Agents work through their own queues in parallel, so the planner can frame boxes while the writer types. Steps are staggered 0.2 s apart in document order, and a step inside a framed element waits until the frame is done. Regions build one at a time: a region that scrolls in while another is building waits its turn, and is skipped back to waiting if it has left the view by then.
 
 ## Options
 
@@ -74,7 +74,7 @@ swarm.enabled()     // the visitor's on/off preference
 swarm.setEnabled(b) // persist on/off (localStorage)
 swarm.skip()        // finish the current region now
 swarm.replay()      // clear the session flag and reload from the top
-swarm.version       // '1.0.0'
+swarm.version       // '1.0.1'
 ```
 
 ## Classes it adds

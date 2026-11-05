@@ -1,4 +1,4 @@
-// swarm-build.js · v1.0.0 · MIT
+// swarm-build.js · v1.0.1 · MIT
 // A crew of labelled agent cursors builds your page in front of the visitor:
 // boxes drawn with live W × H badges, text typed with an I-beam, accents
 // restyled, copy streamed like model output, numbers counted and verified,
@@ -26,7 +26,7 @@
 //   <i data-swarm-origin>                     the crew orbits this before the first build
 //   <p data-swarm-credit hidden>Built by {agents} agents while you watched.</p>
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const DEFAULT_CREW = {
   planner: '#4ee9f5', retriever: '#e7ff52', writer: '#ffb547', stylist: '#ff8fd8',
   eval: '#6aa8ff', guardrail: '#8dffb9', 'red-team': '#ff3b3b',
@@ -125,6 +125,7 @@ export function swarmBuild(options = {}) {
   const originals = new Map();
   const queue = [];
   const agentsUsed = new Set();
+  let io = null;
   let current = null, trace = null, traceTimer = 0, you = null, firstClaimed = false, started = false, attacks = 0;
   window.__swarmBuild = VERSION;
 
@@ -190,6 +191,7 @@ export function swarmBuild(options = {}) {
     const tl = new Timeline();
     tl.scale = o.speed;
     region.classList.add('sb-host');
+    root.classList.add('sb-building');   // off-screen agents must not widen the page (mobile zooms out)
     if (getComputedStyle(region).position === 'static') region.classList.add('sb-rel');
     const layer = div('sb-layer');
     layer.setAttribute('aria-hidden', 'true');
@@ -451,7 +453,7 @@ export function swarmBuild(options = {}) {
           if (!chars.length) return;
           log('writer', 'typing ' + label(el), t);
           tl.call(t, () => el.classList.add('sb-built'));
-          done = type(a, chars, t, parseFloat(el.dataset.swarmCps) || (el.matches('h1') ? 30 : 48));
+          done = type(a, chars, t, parseFloat(el.dataset.swarmCps) || (el.matches('h1') ? 36 : 50));
           shown.set(el, t);
           const st = A.stylist;
           if (st) {
@@ -460,7 +462,7 @@ export function swarmBuild(options = {}) {
             free.stylist = ts;
             done = Math.max(done, ts - 0.4);
           }
-          if (el.dataset.swarmAttack) done = attack(el, chars, done + 0.6);
+          if (el.dataset.swarmAttack) done = attack(el, chars, done + 0.35);
         } else if (s === 'stream' && a) {
           const words = $$('.sb-wd', el);
           if (!words.length) return;
@@ -478,13 +480,13 @@ export function swarmBuild(options = {}) {
           shown.set(el, t);
         }
         if (role) free[role] = done + 0.05;
-        cursor = t + 0.28;
+        cursor += 0.2;
         end = Math.max(end, done);
       });
     });
 
     // 3. leave, sign, restore
-    const tX = end + 0.6;
+    const tX = end + 0.45;
     tl.call(tX, () => {
       const v = view();
       crew.forEach((a, i) => {
@@ -515,7 +517,7 @@ export function swarmBuild(options = {}) {
       list.forEach((el) => { restore(el); el.classList.remove('sb-split'); el.classList.add('sb-built'); el.style.opacity = ''; });
       region.classList.add('swarm-done');
       region.classList.remove('sb-host', 'sb-rel');
-      setTimeout(() => layer.remove(), 900);
+      setTimeout(() => { layer.remove(); if (!document.querySelector('.sb-layer')) root.classList.remove('sb-building'); }, 900);
     };
     return { tl, region, finishUp };
   }
@@ -530,6 +532,8 @@ export function swarmBuild(options = {}) {
   function runNext() {
     if (current || !queue.length) return;
     const { region, isFirst } = queue.shift();
+    const box = region.getBoundingClientRect();
+    if (!isFirst && io && (box.top > innerHeight * 0.85 || box.bottom < 0)) { delete region.dataset.sbQueued; io.observe(region); runNext(); return; }
     let job;
     try { job = plan(region, isFirst); } catch (err) { console.error('[swarm-build]', err); release(region, isFirst); runNext(); return; }
     current = job;
@@ -555,7 +559,6 @@ export function swarmBuild(options = {}) {
     if (region.classList.contains('swarm-done') || region.dataset.sbQueued) return;
     region.dataset.sbQueued = '1';
     queue.push({ region, isFirst });
-    if (current) current.tl.scale = Math.max(current.tl.scale, 3);
     runNext();
   }
 
@@ -576,7 +579,7 @@ export function swarmBuild(options = {}) {
           if (stepsOf(el).includes('stream')) splitWords(el);
         });
       });
-      const io = new IntersectionObserver((entries) => {
+      io = new IntersectionObserver((entries) => {
         entries.forEach((e) => {
           if (!e.isIntersecting) return;
           io.unobserve(e.target);
@@ -585,7 +588,8 @@ export function swarmBuild(options = {}) {
           enqueue(e.target, isFirst);
         });
       }, { rootMargin: o.rootMargin, threshold: 0.05 });
-      regions.forEach((r) => io.observe(r));
+      const fonts = document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve();
+      fonts.then(() => requestAnimationFrame(() => regions.forEach((r) => io.observe(r))));
       return this;
     },
     /** Finish whatever is building right now. */

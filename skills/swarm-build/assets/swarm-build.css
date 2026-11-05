@@ -31,6 +31,7 @@
 .sb-plain.sb-plain { font-style: normal; color: inherit; -webkit-text-fill-color: inherit; }
 
 /* 2 · The crew */
+html.sb-building, html.sb-building body { overflow-x: clip; }   /* cursors flying in from the right never widen the page */
 .sb-rel { position: relative; }
 .sb-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 2147483000; pointer-events: none; overflow: visible; }
 .sb-ag { position: absolute; left: 0; top: 0; will-change: transform; }
