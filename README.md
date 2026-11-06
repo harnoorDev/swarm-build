@@ -2,6 +2,8 @@
 
 **A page that builds itself while you watch.** A crew of labelled agent cursors frames each block with a live `W × H` badge, types the headline, restyles the accents, streams the copy like model output and counts up the stats. If you want, a **red-team agent** tries to rewrite your promise, and the **guardrail agent** blocks it.
 
+![swarm-build demo: agent cursors building a page](docs/demo.gif)
+
 - **Zero dependencies.** One ES module (~25 KB) and one stylesheet.
 - **Declarative.** You add `data-swarm` and `data-swarm-step` attributes. No timeline code.
 - **Built for real sites.** It plays once per session and fast-forwards on any key, click, tap or scroll. Reduced motion turns it off, the text stays in the DOM, and the agent layers are `aria-hidden`.
