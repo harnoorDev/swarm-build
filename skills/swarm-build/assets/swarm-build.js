@@ -825,7 +825,9 @@ export function swarmBuild(options = {}) {
      * Name a point inside a 3D scene. `fn` returns its viewport position { x, y } in CSS pixels, or null when it is off screen.
      * With `{ at }` (0–1) it is a build site: agent `by` (default 'renderer') works there while the scene is at that
      * progress, for `hold` seconds (default 0.7). `say` is the trace line, `label` the pin text (false for none),
-     * `on` the scene element or selector (default the first scene on the page). Register sites before the region builds.
+     * `pin` false leaves out the ring, `glyph` the cursor it works with (arrow, cross, ibeam or pen), `doing` a line
+     * (or a function returning one) under its name while it works, `on` the scene element or selector (default the
+     * first scene on the page). Register sites before the region builds.
      */
     anchor(name, fn, opts = {}) { if (fn) anchors.set(name, { ...opts, fn }); else anchors.delete(name); return this; },
     /** Build again from the top: clears the once-per-session flag and reloads. */
