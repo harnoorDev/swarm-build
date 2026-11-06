@@ -1,15 +1,16 @@
 # swarm-build
 
-**A page that builds itself while you watch.** A crew of labelled agent cursors frames each block with a live `W × H` badge, types the headline, restyles the accents, streams the copy like model output and counts up the stats. If you want, a **red-team agent** tries to rewrite your promise, and the **guardrail agent** blocks it.
+**A page that builds itself while you watch.** A crew of labelled agent cursors frames each block with a live `W × H` badge, types the headline, restyles the accents, streams the copy like model output and counts up the stats. On 3D sites, a **renderer agent** sweeps the scene in while it assembles itself. If you want, a **red-team agent** tries to rewrite your promise, and the **guardrail agent** blocks it.
 
 ![swarm-build demo: agent cursors building a page](docs/demo.gif)
 
-- **Zero dependencies.** One ES module (~30 KB, ~10 KB gzipped) and one stylesheet (~2 KB gzipped).
+- **Zero dependencies.** One ES module (~38 KB, ~12 KB gzipped) and one stylesheet (~2.5 KB gzipped).
 - **Declarative.** You add `data-swarm` and `data-swarm-step` attributes. No timeline code.
+- **Works with 3D sites.** Three.js, React Three Fiber, Babylon, Spline, `<model-viewer>` or a raw WebGL canvas: the scene follows `swarm:scene` progress events (geometry, then materials, then lighting), can make the build wait for its models, and lets the renderer point at objects inside it as they move.
 - **Built for real sites.** It plays once per session and fast-forwards on any key, click, tap or scroll. Reduced motion turns it off, the text stays in the DOM, and the agent layers are `aria-hidden`.
 - **Ships as a Claude skill.** `skills/swarm-build/SKILL.md` teaches Claude how to add it to any site, with a verification checklist.
 
-**Demo:** https://harnoordev.github.io/swarm-build/ · **In production:** https://iamharnoor.com
+**Demo:** https://harnoordev.github.io/swarm-build/ · **3D demo:** https://harnoordev.github.io/swarm-build/skills/swarm-build/examples/3d.html · **In production:** https://iamharnoor.com
 
 ## Use it
 
@@ -34,7 +35,21 @@
 </script>
 ```
 
-The steps are `frame` (planner), `type` (writer, with accents restyled by the stylist), `stream` (writer), `fetch` (retriever), `count` (eval) and `reveal`. The full reference is in [`references/api.md`](skills/swarm-build/references/api.md). For existing intros, GSAP and SplitText, Lenis, Next.js and custom crews, see [`references/integration.md`](skills/swarm-build/references/integration.md).
+The steps are `frame` (planner), `type` (writer, with accents restyled by the stylist), `stream` (writer), `fetch` (retriever), `count` (eval), `scene` (renderer, for 3D viewports) and `reveal`.
+
+For a 3D viewport:
+
+```html
+<div id="stage" data-swarm-step="scene" data-swarm-await data-swarm-anchors="engine"></div>
+<script type="module">
+  const swarm = swarmBuild().start();
+  const stage = document.getElementById('stage');
+  let build = 1;                                            // finished unless the swarm says otherwise
+  stage.addEventListener('swarm:scene', (e) => { build = e.detail.progress; });   // drive your scene from it
+  loader.load('/plane.glb', () => swarm.ready(stage));      // sweep it in once the model is loaded
+  swarm.anchor('engine', () => toScreen(engineMesh));       // the renderer follows it on screen
+</script>
+``` The full reference is in [`references/api.md`](skills/swarm-build/references/api.md). For existing intros, GSAP and SplitText, Lenis, Next.js, 3D sites and custom crews, see [`references/integration.md`](skills/swarm-build/references/integration.md).
 
 ## Install the Claude skill
 

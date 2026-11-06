@@ -1,9 +1,12 @@
-// swarm-build.js · v1.0.1 · MIT
+// swarm-build.js · v1.1.0 · MIT
 // A crew of labelled agent cursors builds your page in front of the visitor:
 // boxes drawn with live W × H badges, text typed with an I-beam, accents
 // restyled, copy streamed like model output, numbers counted and verified,
 // and (optionally) a red-team agent that tries to rewrite a word until the
-// guardrail agent blocks it.
+// guardrail agent blocks it. 3D scenes (Three.js, React Three Fiber, Babylon,
+// Spline, <model-viewer>, any <canvas>) are built too: the renderer agent
+// frames the viewport and sweeps it in, geometry → materials → lighting, while
+// your scene follows along through `swarm:scene` progress events.
 //
 // Zero dependencies. Content stays in the DOM the whole time; agents only hide
 // and reveal it. Layers are aria-hidden, split text is restored when a region
@@ -23,15 +26,20 @@
 //     <p data-swarm-step="frame stream">      boxed, then streamed word by word
 //     <span data-swarm-step="fetch">          scrambled in by the retriever
 //     <b data-swarm-step="count">2.2K</b>     counted up and checked by eval
+//     <canvas data-swarm-step="scene"         a 3D viewport, swept in by the renderer;
+//             data-swarm-await                (optional) wait for swarm.ready(canvas) before sweeping
+//             data-swarm-anchors="apex, core"> (optional) points in the scene the renderer inspects
 //   <i data-swarm-origin>                     the crew orbits this before the first build
 //   <p data-swarm-credit hidden>Built by {agents} agents while you watched.</p>
 
-const VERSION = '1.0.1';
+const VERSION = '1.1.0';
 const DEFAULT_CREW = {
   planner: '#4ee9f5', retriever: '#e7ff52', writer: '#ffb547', stylist: '#ff8fd8',
-  eval: '#6aa8ff', guardrail: '#8dffb9', 'red-team': '#ff3b3b',
+  eval: '#6aa8ff', guardrail: '#8dffb9', 'red-team': '#ff3b3b', renderer: '#b49bff',
 };
-const ROLE = { frame: 'planner', fetch: 'retriever', type: 'writer', stream: 'writer', count: 'eval', reveal: null };
+const ROLE = { frame: 'planner', fetch: 'retriever', type: 'writer', stream: 'writer', count: 'eval', scene: 'renderer', reveal: null };
+// a scene builds in three phases; the sweep reports which one it is in
+const PHASES = [[0, 'geometry'], [0.45, 'materials'], [0.8, 'lighting']];
 const SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/#%&*+=<>';
 const EASE = {
   linear: (p) => p,
@@ -60,9 +68,12 @@ const ACCENTS = 'em, [data-swarm-accent]';
 
 // ------------------------------------------------------------------ timeline
 // A tiny scheduler: calls and tweens at absolute times, played on rAF,
-// fast-forwardable (scale) and finishable (jump to the end, firing everything in order).
+// fast-forwardable (scale), holdable (a 3D scene still loading its assets) and
+// finishable (jump to the end, firing everything in order).
 class Timeline {
-  constructor() { this.items = []; this.t = 0; this.dur = 0; this.scale = 1; this.raf = 0; this.active = false; this.onDone = null; }
+  constructor() { this.items = []; this.t = 0; this.dur = 0; this.scale = 1; this.raf = 0; this.active = false; this.held = false; this.onDone = null; }
+  hold() { this.held = true; }
+  resume() { this.held = false; }
   call(at, fn) { this.items.push({ at, fn }); this.dur = Math.max(this.dur, at); return this; }
   tween(at, d, ease, update, init) {
     this.items.push({ at, d: Math.max(d, 1e-4), ease: EASE[ease] || EASE.out, update, init });
@@ -76,7 +87,7 @@ class Timeline {
     const step = (now) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
-      this.seek(this.t + dt * this.scale);
+      if (!this.held) this.seek(this.t + dt * this.scale);
       if (this.t >= this.dur) this.finish(); else this.raf = requestAnimationFrame(step);
     };
     this.raf = requestAnimationFrame(step);
@@ -97,6 +108,7 @@ class Timeline {
   finish() {
     if (!this.active) return;
     cancelAnimationFrame(this.raf);
+    this.held = false;
     this.seek(this.dur + 1);
     this.active = false;
     if (this.onDone) this.onDone();
@@ -113,6 +125,7 @@ export function swarmBuild(options = {}) {
     trace: true,
     you: true,
     rootMargin: '0px 0px -20% 0px',
+    sceneTimeout: 4,          // seconds a data-swarm-await scene may hold its build before it is swept in anyway
     onRegionStart: null,
     onRegionEnd: null,
     ...options,
@@ -128,6 +141,23 @@ export function swarmBuild(options = {}) {
   let io = null;
   let current = null, trace = null, traceTimer = 0, you = null, firstClaimed = false, started = false, attacks = 0;
   window.__swarmBuild = VERSION;
+
+  // ---------------------------------------------------------------- 3D scenes
+  // A scene element hears `swarm:scene` ({ progress 0→1, phase }) while it builds, and always ends on
+  // progress 1 / 'ready': after its sweep, when skipped, on a repeat visit or with reduced motion.
+  // So a scene that starts at progress 1 and only listens is never left half built.
+  const anchors = new Map();       // name → () => ({ x, y }) in viewport pixels, or null when off screen
+  const loaded = new WeakSet();    // data-swarm-await scenes whose app said they are ready
+  const settled = new WeakSet();   // scenes that already received their final 'ready'
+  const sceneEvent = (el, progress, phase) => el.dispatchEvent(new CustomEvent('swarm:scene', { bubbles: true, detail: { progress, phase } }));
+  const sceneDone = (el) => {
+    if (settled.has(el) || !stepsOf(el).includes('scene')) return;
+    settled.add(el);
+    el.style.clipPath = el.dataset.sbClip || '';
+    delete el.dataset.sbClip;
+    sceneEvent(el, 1, 'ready');
+  };
+  const anchorNames = (el) => (el.dataset.swarmAnchors || '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 3);
 
   // ---------------------------------------------------------------- text helpers
   const remember = (el) => { if (!originals.has(el)) originals.set(el, el.innerHTML); };
@@ -211,7 +241,8 @@ export function swarmBuild(options = {}) {
       if (stepsOf(el).includes('type') && $$(ACCENTS, el).length) need.add('stylist');
       if (el.dataset.swarmAttack) { need.add('red-team'); need.add('guardrail'); }
     });
-    if (isFirst) Object.keys(o.crew).forEach((id) => need.add(id));
+    // the opening orbit shows the whole crew; the renderer only joins when this region has a 3D scene
+    if (isFirst) Object.keys(o.crew).forEach((id) => { if (id !== 'renderer' || need.has('renderer')) need.add(id); });
     const A = {};
     Object.keys(o.crew).filter((id) => need.has(id)).forEach((id, i) => {
       const el = put('sb-ag');
@@ -383,6 +414,89 @@ export function swarmBuild(options = {}) {
       tl.tween(tG + 1.05, 0.3, 'out', (p) => { guard.style.opacity = 1 - p; });
       return tG + 0.55;
     }
+    // 3D: the renderer frames the viewport, waits for the scene's assets if asked to, then sweeps the
+    // scene in top to bottom (geometry → materials → lighting) while the scene follows `swarm:scene`.
+    // Afterwards it can visit named points inside the scene, following them as they move.
+    function scene(a, el, t) {
+      const b = rel(el), name = label(el), color = o.crew.renderer || DEFAULT_CREW.renderer;
+      let ts = t;
+      if (a) { log('renderer', 'viewport ' + name, t); ts = frame(a, el, t, 0.4) + 0.06; }
+      const ov = put('sb-scene');
+      ov.style.setProperty('--c', color);
+      Object.assign(ov.style, { left: b.x + 'px', top: b.y + 'px', width: b.w + 'px', height: b.h + 'px', opacity: 0, borderRadius: getComputedStyle(el).borderRadius });
+      ov.innerHTML = '<i class="sb-scene__grid"></i><i class="sb-scene__scan"></i><span class="sb-scene__hud"></span>';
+      const [grid, scan, hud] = ov.children;
+      // shown to the page, but clipped away until the sweep passes over it
+      const arm = () => {
+        if (!('sbClip' in el.dataset)) el.dataset.sbClip = el.style.clipPath || '';
+        el.style.clipPath = 'inset(0 0 100% 0)';
+        el.classList.add('sb-built');
+        el.style.opacity = '';
+      };
+      if (el.hasAttribute('data-swarm-await')) {
+        tl.call(ts, () => {
+          arm();
+          if (loaded.has(el)) return;
+          ov.style.opacity = 1;
+          ov.classList.add('is-loading');
+          hud.textContent = 'loading assets';
+          say('renderer', 'loading assets · ' + name);
+          sceneEvent(el, 0, 'loading');
+          tl.hold();
+          let timer = 0;
+          const proceed = () => { clearTimeout(timer); el.removeEventListener('swarm:ready', proceed); tl.resume(); };
+          timer = setTimeout(proceed, o.sceneTimeout * 1000);
+          el.addEventListener('swarm:ready', proceed);
+        });
+      }
+      const D = 1.5, tS = ts + 0.3;
+      if (a) { glyph(a, 'cross', ts); go(a, b.x + b.w - 26, b.y, ts, 0.28); }
+      let phase = '';
+      tl.tween(tS, D, 'inOut2', (p) => {
+        const ph = p >= 1 ? 'ready' : PHASES.filter(([at]) => p >= at).pop()[1];
+        if (ph !== phase) { phase = ph; if (ph !== 'ready') say('renderer', ph + ' · ' + name); }
+        ov.style.opacity = 1;
+        hud.textContent = (ph === 'ready' ? 'first frame' : ph) + ' · ' + Math.round(p * 100) + '%';
+        scan.style.transform = 'translateY(' + (p * b.h).toFixed(1) + 'px)';
+        grid.style.clipPath = 'inset(' + (p * 100).toFixed(2) + '% 0 0 0)';
+        if (p < 1) { el.style.clipPath = 'inset(0 0 ' + ((1 - p) * 100).toFixed(2) + '% 0)'; sceneEvent(el, p, ph); } else sceneDone(el);
+        if (a) a.set(b.x + b.w - 26, b.y + p * b.h);
+      }, () => { arm(); ov.classList.remove('is-loading'); });
+      tl.tween(tS + D + 0.05, 0.3, 'out', (p) => { ov.style.opacity = 1 - p; });
+      let end = tS + D;
+      if (!a) return end;
+      glyph(a, 'arrow', end + 0.05);
+      // inspect points inside the scene: the app projects them to the screen with swarm.anchor(name, fn)
+      anchorNames(el).forEach((n, i) => {
+        const ti = tS + D + 0.15 + i * 0.85;
+        const at = () => {
+          const f = anchors.get(n), q = f && f();
+          if (!q) return null;
+          const g = origin();
+          return { x: q.x - g.left, y: q.y - g.top };
+        };
+        const pin = put('sb-pin');
+        pin.style.setProperty('--c', color);
+        pin.innerHTML = '<span>' + esc(n) + '</span>';
+        pin.style.opacity = 0;
+        let fx = 0, fy = 0;
+        tl.tween(ti, 0.35, 'out', (p) => { const q = at(); if (q) a.set(fx + (q.x + 6 - fx) * p, fy + (q.y + 6 - fy) * p); }, () => {
+          fx = a.x; fy = a.y;
+          if (!anchors.has(n)) console.warn('[swarm-build] no anchor "' + n + '": register it with swarm.anchor("' + n + '", fn)');
+        });
+        tl.tween(ti + 0.35, 0.6, 'linear', (p) => {
+          const q = at();
+          if (!q) { pin.style.opacity = 0; return; }
+          a.set(q.x + 6, q.y + 6);                      // keeps hold of an object that is moving
+          pin.style.left = q.x + 'px';
+          pin.style.top = q.y + 'px';
+          pin.style.opacity = p >= 1 ? 0 : Math.min(1, p * 6);
+        });
+        tl.call(ti + 0.36, () => { if (at()) say('renderer', 'inspected ' + n + ' · ' + name); });
+        end = ti + 0.95;
+      });
+      return end;
+    }
 
     // 1. arrival: the first region opens with the crew orbiting the origin
     let start = 0.35;
@@ -478,6 +592,9 @@ export function swarmBuild(options = {}) {
           glyph(a, 'arrow', t + d + 0.1);
           done = t + d;
           shown.set(el, t);
+        } else if (s === 'scene') {
+          done = scene(a, el, t);
+          shown.set(el, t);
         }
         if (role) free[role] = done + 0.05;
         cursor += 0.2;
@@ -514,7 +631,7 @@ export function swarmBuild(options = {}) {
     }
     tl.call(tX + 0.95, () => {});
     const finishUp = () => {
-      list.forEach((el) => { restore(el); el.classList.remove('sb-split'); el.classList.add('sb-built'); el.style.opacity = ''; });
+      list.forEach((el) => { restore(el); el.classList.remove('sb-split'); el.classList.add('sb-built'); el.style.opacity = ''; sceneDone(el); });
       region.classList.add('swarm-done');
       region.classList.remove('sb-host', 'sb-rel');
       setTimeout(() => { layer.remove(); if (!document.querySelector('.sb-layer')) root.classList.remove('sb-building'); }, 900);
@@ -525,7 +642,7 @@ export function swarmBuild(options = {}) {
   // ---------------------------------------------------------------- running
   function release(region, withOrphans) {
     const list = $$('[data-swarm-step]', region).concat(withOrphans ? $$('[data-swarm-step]').filter((el) => !el.closest('[data-swarm]')) : []);
-    list.forEach((el) => { restore(el); el.classList.remove('sb-split'); el.classList.add('sb-built'); el.style.opacity = ''; });
+    list.forEach((el) => { restore(el); el.classList.remove('sb-split'); el.classList.add('sb-built'); el.style.opacity = ''; sceneDone(el); });
     $$('[data-swarm-credit]').forEach((c) => { if (withOrphans) c.hidden = true; });
     region.classList.add('swarm-done');
   }
@@ -539,7 +656,7 @@ export function swarmBuild(options = {}) {
     current = job;
     youOn(true);
     if (o.onRegionStart) o.onRegionStart(region);
-    const ff = () => { job.tl.scale = Math.max(job.tl.scale, 5); };
+    const ff = () => { job.tl.scale = Math.max(job.tl.scale, 5); job.tl.resume(); };   // an impatient visitor also skips a scene's asset wait
     const evs = ['keydown', 'pointerdown', 'wheel', 'touchstart'];
     evs.forEach((e) => addEventListener(e, ff, { passive: true }));
     const away = new IntersectionObserver(([e]) => { if (!e.isIntersecting && job.tl.active) job.tl.finish(); });
@@ -570,6 +687,8 @@ export function swarmBuild(options = {}) {
     start() {
       if (started) return this;
       started = true;
+      // remember scenes that finish loading before their turn comes
+      $$('[data-swarm-await]').forEach((el) => el.addEventListener('swarm:ready', () => loaded.add(el), { once: true }));
       const regions = $$('[data-swarm]');
       if (!active) { regions.forEach((r, i) => release(r, i === 0)); root.classList.remove('swarm-js'); return this; }
       if (o.once === 'session') session.set(o.key, '1');
@@ -594,6 +713,17 @@ export function swarmBuild(options = {}) {
     },
     /** Finish whatever is building right now. */
     skip() { if (current) current.tl.finish(); },
+    /** A data-swarm-await scene has loaded its assets: sweep it in. Takes an element or a selector. */
+    ready(target) {
+      (typeof target === 'string' ? $$(target) : [target]).forEach((el) => {
+        if (!el) return;
+        loaded.add(el);
+        el.dispatchEvent(new CustomEvent('swarm:ready'));
+      });
+      return this;
+    },
+    /** Name a point inside a 3D scene. `fn` returns its viewport position { x, y } in CSS pixels, or null when it is off screen. */
+    anchor(name, fn) { if (fn) anchors.set(name, fn); else anchors.delete(name); return this; },
     /** Build again from the top: clears the once-per-session flag and reloads. */
     replay() { session.set(o.key, '0'); local.set(o.key + '-off', '0'); scrollTo(0, 0); location.reload(); },
     /** Persistently turn the effect on or off for this visitor. */

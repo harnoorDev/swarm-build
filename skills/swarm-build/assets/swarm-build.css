@@ -1,4 +1,4 @@
-/* swarm-build.css · v1.0.0 · MIT · pairs with swarm-build.js */
+/* swarm-build.css · v1.1.0 · MIT · pairs with swarm-build.js */
 
 /* Theme hooks: override on :root (or any ancestor) to match your site. */
 :root {
@@ -15,7 +15,8 @@
       so with no JavaScript, reduced motion or the effect switched off, nothing is ever hidden. */
 .swarm-js [data-swarm-step~="frame"]:not(.sb-built),
 .swarm-js [data-swarm-step~="reveal"]:not(.sb-built),
-.swarm-js [data-swarm-step~="count"]:not(.sb-built) { opacity: 0; }
+.swarm-js [data-swarm-step~="count"]:not(.sb-built),
+.swarm-js [data-swarm-step~="scene"]:not(.sb-built) { opacity: 0; }
 .swarm-js [data-swarm-step~="fetch"]:not(.sb-built),
 .swarm-js [data-swarm-step~="type"]:not(.sb-split):not(.sb-built),
 .swarm-js [data-swarm-step~="stream"]:not(.sb-split):not(.sb-built) { visibility: hidden; }
@@ -56,6 +57,22 @@ html.sb-building, html.sb-building body { overflow-x: clip; }   /* cursors flyin
 .sb-hl { position: absolute; background: color-mix(in srgb, var(--sb-select) 34%, transparent); border-radius: 2px; }
 .sb-guard { position: absolute; border: 1.5px solid var(--sb-ok); border-radius: 6px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--sb-ok) 14%, transparent), 0 0 24px color-mix(in srgb, var(--sb-ok) 25%, transparent); }
 .sb-chip { position: absolute; padding: 4px 7px; border-radius: 4px; color: #0b0b0a; font: 600 10.5px/1 var(--sb-mono); letter-spacing: .06em; white-space: nowrap; box-shadow: 0 6px 18px -6px rgba(0, 0, 0, .6); }
+
+/* 3D scenes: a wireframe grid over the part not yet rendered, the scan line, and the phase readout */
+.sb-scene { position: absolute; overflow: hidden; }
+.sb-scene__grid {
+  position: absolute; inset: 0; background-color: color-mix(in srgb, var(--c) 5%, transparent);
+  background-image: linear-gradient(color-mix(in srgb, var(--c) 24%, transparent) 1px, transparent 1px),
+                    linear-gradient(90deg, color-mix(in srgb, var(--c) 24%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px; background-position: -1px -1px;
+}
+.sb-scene__scan { position: absolute; left: 0; right: 0; top: -1px; height: 2px; background: var(--c); box-shadow: 0 0 14px 2px color-mix(in srgb, var(--c) 70%, transparent); }
+.sb-scene__hud { position: absolute; left: 10px; top: 10px; padding: 4px 7px; border-radius: 4px; background: var(--c); color: #0b0b0a; font: 600 10.5px/1 var(--sb-mono); letter-spacing: .04em; white-space: nowrap; }
+.sb-scene.is-loading .sb-scene__scan { animation: sb-load 1.1s ease-in-out infinite alternate; }
+@keyframes sb-load { from { transform: translateY(0); opacity: .35; } to { transform: translateY(46px); opacity: 1; } }
+/* a point inside the scene the renderer is inspecting; it follows the object as it moves */
+.sb-pin { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 1.5px solid var(--c); border-radius: 50%; box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 18%, transparent), 0 0 18px color-mix(in srgb, var(--c) 45%, transparent); }
+.sb-pin span { position: absolute; left: 28px; top: -24px; padding: 3px 6px; border-radius: 4px; background: var(--c); color: #0b0b0a; font: 600 10.5px/1 var(--sb-mono); white-space: nowrap; box-shadow: 0 6px 18px -6px rgba(0, 0, 0, .6); }
 
 /* 4 · Trace pill and the visitor's own "you" tag */
 .sb-trace {
