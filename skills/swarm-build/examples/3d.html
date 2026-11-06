@@ -35,6 +35,29 @@
   main .sb-scene__hud { display: none; }
   /* agents wearing ink get light text on their tags */
   .sb-ag[style*="#16181d"] .sb-ag__tag { color: #fff; }
+  /* the session: what is being built, how much of it, by how many, how long */
+  .session, .log { position: absolute; left: calc(14px + env(safe-area-inset-left)); margin: 0; color: #16181d; font: 500 11px/1.5 var(--sb-mono); pointer-events: none;
+    border-radius: 8px; background: rgba(255, 255, 255, .62); box-shadow: 0 6px 20px -10px rgba(20, 30, 50, .5); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  .session { top: calc(14px + env(safe-area-inset-top)); display: flex; gap: 14px; align-items: baseline; padding: 7px 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .session b { font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  .session b i { width: 7px; height: 7px; border-radius: 50%; background: #ff5b3a; animation: rec 1.1s ease-in-out infinite alternate; }
+  main.swarm-done .session b i { animation: none; background: #3c9a5f; }
+  .session span { color: #4b5160; }
+  @keyframes rec { to { opacity: .25; } }
+  .log { bottom: calc(14px + env(safe-area-inset-bottom)); width: min(400px, calc(100vw - 92px)); padding: 7px 11px; list-style: none; font-variant-numeric: tabular-nums; }
+  .log:empty { display: none; }
+  .log li { display: flex; gap: 10px; white-space: nowrap; overflow: hidden; animation: ln .3s cubic-bezier(.2, .8, .2, 1); }
+  .log li:nth-last-child(n+4) { opacity: .45; }
+  .log time { color: #6b7180; }
+  .log b { font-weight: 600; flex: 0 0 11.5ch; display: flex; align-items: center; gap: 6px; }
+  .log b i { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 2px; background: var(--c); box-shadow: inset 0 0 0 1px rgba(22, 24, 29, .35); }
+  .log span { overflow: hidden; text-overflow: ellipsis; }
+  @keyframes ln { from { opacity: 0; transform: translateY(6px); } }
+  @media (max-width: 600px) {
+    .session { gap: 10px; font-size: 10px; padding: 6px 9px; } .session .k { display: none; }
+    .log { font-size: 10px; } .log li:nth-last-child(n+4) { display: none; } .log b { flex-basis: 10.5ch; }
+  }
+  @media (prefers-reduced-motion: reduce) { .log { display: none; } .session b i { animation: none; } }
   .again {
     position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom));
     width: 46px; height: 46px; display: grid; place-items: center; padding: 0; border-radius: 50%;
@@ -58,19 +81,21 @@
   <canvas id="world" data-swarm-step="scene" data-swarm-label="world" data-swarm-sweep="none" data-swarm-duration="20" data-swarm-await
           role="img" aria-label="A little steam train crosses a world built in front of it: sunflower and lavender fields with windmills, a pastel harbour town with a lighthouse and sailboats, then pine forest up to a snowy summit station at golden hour."></canvas>
   <canvas id="marks" aria-hidden="true"></canvas>
+  <div class="session" aria-hidden="true"><b><i></i>valley-line</b><span class="n">0 objects</span><span class="k">16 agents</span><span class="t">0:00.0</span></div>
+  <ol class="log" aria-hidden="true"></ol>
   <button class="again" type="button" aria-label="Build the world again">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4.5h-4.5"/></svg>
   </button>
 </main>
 
-<!-- 3 · The engine, a crew of twelve, and a Three.js world that follows swarm:scene progress. -->
+<!-- 3 · The engine, a crew of sixteen, and a Three.js world that follows swarm:scene progress. -->
 <script type="module">
   import { swarmBuild } from '../assets/swarm-build.js';
 
   const CORAL = '#ff5b3a', CREAM = '#fff6e8', INK = '#16181d';
   const crew = {
-    renderer: '#b49bff', conductor: CORAL, tracklayer: INK, terraformer: CREAM, gardener: CORAL, painter: INK,
-    carpenter: CREAM, rigger: CORAL, mason: INK, shipwright: CREAM, cloudsmith: CORAL, lamplighter: INK,
+    renderer: '#b49bff', conductor: CORAL, tracklayer: INK, terraformer: CREAM, surveyor: CORAL, gardener: INK, planter: CREAM, painter: CORAL,
+    carpenter: INK, roofer: CREAM, mason: CORAL, rigger: INK, shipwright: CREAM, cloudsmith: CORAL, lamplighter: INK, stonecutter: CREAM,
   };
   const DUR = 20;   // seconds, as in data-swarm-duration
   const swarm = swarmBuild({ once: 'always', crew, trace: false, sceneTimeout: 8 });
@@ -154,7 +179,7 @@
     return lo / 1000;
   }
   // when something at path length s starts being built: a burst around the start, then a front running ahead of the train
-  const W = 0.032;   // build window, in progress (≈ 0.65 s)
+  const W = 0.04;   // build window, in progress (0.8 s): coral wireframe rising, then solid
   const buildAt = (s, lead) => Math.min(0.955, Math.max(0.006 + 0.06 * cl(s / (S0 + lead + 10)), pOfS(s - lead)));
 
   // ------------------------------------------------------------------ the land
@@ -213,14 +238,14 @@
 
   // the fields: sunflowers and lavender in rows, hay bales on the wheat
   for (const f of FIELDS) {
-    const lead = 52;
+    const lead = 36;
     if (f.crop === 'sun' || f.crop === 'lav') {
       const du = f.crop === 'sun' ? 0.95 : 1.05, dv = f.crop === 'sun' ? 1.1 : 1.25;
       for (let v = -f.wid / 2 + 0.8; v < f.wid / 2 - 0.5; v += dv) for (let u = -f.len / 2 + 0.7; u < f.len / 2 - 0.5; u += du) {
         const x = f.c[0] + f.u[0] * u - f.u[1] * v + rr(-0.15, 0.15), z = f.c[1] + f.u[1] * u + f.u[0] * v + rr(-0.15, 0.15);
         const nr = nearest(x, z);
         if (nr.d < 7) continue;
-        add(f.crop === 'sun' ? 'sunflower' : 'lavender', { x, y: height(x, z, nr), z, ry: f.crop === 'sun' ? rr(-0.45, 0.45) : rr(0, 6.28), sx: f.crop === 'sun' ? rr(0.7, 0.9) : rr(0.8, 1.1), s: nr.s, field: FIELDS.indexOf(f), b: buildAt(nr.s + (u + f.len / 2) * 0.35, lead) });
+        add(f.crop === 'sun' ? 'sunflower' : 'lavender', { x, y: height(x, z, nr), z, ry: f.crop === 'sun' ? rr(-0.45, 0.45) : rr(0, 6.28), sx: f.crop === 'sun' ? rr(0.7, 0.9) : rr(0.8, 1.1), s: nr.s, field: FIELDS.indexOf(f), u, v, b: buildAt(nr.s + (u + f.len / 2) * 0.35, lead) });
       }
     } else if (f.crop === 'wheat') {
       for (let k = 0; k < 7; k++) {
@@ -234,19 +259,19 @@
   // windmills on the hills, and a farm
   for (const [s, side, off] of [[64, -1, 42], [92, 1, 36], [130, -1, 44], [152, 1, 46]]) {
     const a = pathAt(s), x = a.p[0] + a.r[0] * side * off, z = a.p[2] + a.r[2] * side * off, nr = nearest(x, z);
-    add('windmill', { x, y: height(x, z, nr) - 0.2, z, ry: 0.6, s: nr.s, b: buildAt(nr.s, 70) });
+    add('windmill', { x, y: height(x, z, nr) - 0.2, z, ry: 0.6, s: nr.s, b: buildAt(nr.s, 50) });
     clearOf.push([x, z, 4]);
   }
   {
     const a = pathAt(86), x = a.p[0] - a.r[0] * 30, z = a.p[2] - a.r[2] * 30, nr = nearest(x, z), ry = Math.atan2(a.t[0], a.t[2]);
-    add('barn', { x, y: height(x, z, nr) - 0.1, z, ry, s: nr.s, b: buildAt(nr.s, 60) });
-    add('silo', { x: x + a.t[0] * 5.4, y: height(x + a.t[0] * 5.4, z + a.t[2] * 5.4) - 0.1, z: z + a.t[2] * 5.4, ry, s: nr.s, b: buildAt(nr.s, 60) + 0.01 });
+    add('barn', { x, y: height(x, z, nr) - 0.1, z, ry, s: nr.s, b: buildAt(nr.s, 42) });
+    add('silo', { x: x + a.t[0] * 5.4, y: height(x + a.t[0] * 5.4, z + a.t[2] * 5.4) - 0.1, z: z + a.t[2] * 5.4, ry, s: nr.s, b: buildAt(nr.s, 42) + 0.01 });
     clearOf.push([x, z, 7]);
   }
   // fences along the line through the fields
   for (let s = 26; s < 150; s += 2.4) for (const side of [-1, 1]) {
     const a = pathAt(s), x = a.p[0] + a.r[0] * side * 4.2, z = a.p[2] + a.r[2] * side * 4.2;
-    add('fence', { x, y: height(x, z), z, ry: Math.atan2(a.t[0], a.t[2]), s, b: buildAt(s, 34) + 0.002 });
+    add('fence', { x, y: height(x, z), z, ry: Math.atan2(a.t[0], a.t[2]), s, b: buildAt(s, 26) + 0.002 });
   }
   // the harbour town: pastel houses up the hill, a church, a pier, boats and a lighthouse on the islet
   const WALLS = ['#f7d9c4', '#f6e7a8', '#c3e4d8', '#f5b9a8', '#cdd9f1', '#fff1df', '#e9d3ef', '#d6ecb5'];
@@ -259,25 +284,25 @@
       const w = rr(2.4, 3.8), d = rr(2.3, 3.2), hh = rr(2.2, 4.4), y = height(x, z, nr);
       if (nr.d < 4.6 || y < 0.9 || !free(x, z, Math.max(w, d) * 0.62) || coastX(z) - x < 4) continue;
       const ry = Math.atan2(a.r[0], a.r[2]) + (side < 0 ? 0 : Math.PI) + rr(-0.15, 0.15);
-      const b = buildAt(nr.s + Math.max(0, nr.d - 8) * 0.3, 58);
+      const b = buildAt(nr.s + Math.max(0, nr.d - 8) * 0.3, 38);
       add('house', { x, y: y - 0.25, z, ry, sx: w, sy: hh, sz: d, s: nr.s, b, color: pick(WALLS) });
       add('roof', { x, y: y - 0.25 + hh, z, ry, sx: w, sy: rr(2.0, 3.0), sz: d, s: nr.s, b: b + 0.012, color: pick(ROOFS) });
       clearOf.push([x, z, Math.max(w, d) * 0.62]);
       n++;
     }
     const a = pathAt(192), x = a.p[0] - a.r[0] * 24, z = a.p[2] - a.r[2] * 24, nr = nearest(x, z);
-    if (free(x, z, 3)) { add('church', { x, y: height(x, z, nr) - 0.3, z, ry: Math.atan2(a.r[0], a.r[2]), s: nr.s, b: buildAt(nr.s, 64) }); clearOf.push([x, z, 5]); }
+    if (free(x, z, 3)) { add('church', { x, y: height(x, z, nr) - 0.3, z, ry: Math.atan2(a.r[0], a.r[2]), s: nr.s, b: buildAt(nr.s, 46) }); clearOf.push([x, z, 5]); }
     const pz = 30, px0 = coastX(pz) - 3;
-    add('pier', { x: px0, y: 0.35, z: pz, ry: Math.PI / 2, s: nearest(px0, pz).s, b: buildAt(nearest(px0, pz).s, 60) });
+    add('pier', { x: px0, y: 0.35, z: pz, ry: Math.PI / 2, s: nearest(px0, pz).s, b: buildAt(nearest(px0, pz).s, 44) });
     for (let k = 0; k < 7; k++) {
       const z = rr(-6, 62), x = coastX(z) + rr(10, 34), nr = nearest(x, z);
-      add('boat', { x, y: 0, z, ry: rr(0, 6.28), s: nr.s, b: buildAt(nr.s, 66), seed: rnd() * 10, color: pick(['#ffffff', '#fff2d6', '#ffd9c9']) });
+      add('boat', { x, y: 0, z, ry: rr(0, 6.28), s: nr.s, b: buildAt(nr.s, 48), seed: rnd() * 10, color: pick(['#ffffff', '#fff2d6', '#ffd9c9']) });
     }
     const nrI = nearest(ISLE[0], ISLE[1]);
-    add('lighthouse', { x: ISLE[0], y: land(ISLE[0], ISLE[1], nrI) - 0.3, z: ISLE[1], ry: 0, s: nrI.s, b: buildAt(nrI.s, 80) });
+    add('lighthouse', { x: ISLE[0], y: land(ISLE[0], ISLE[1], nrI) - 0.3, z: ISLE[1], ry: 0, s: nrI.s, b: buildAt(nrI.s, 62) });
     for (let s = 150; s < 234; s += 9) {   // lamps along the harbour side of the line
       const a = pathAt(s), x = a.p[0] + a.r[0] * 3.6, z = a.p[2] + a.r[2] * 3.6;
-      add('lamp', { x, y: height(x, z), z, ry: 0, s, b: buildAt(s, 30) + 0.006 });
+      add('lamp', { x, y: height(x, z), z, ry: 0, s, b: buildAt(s, 22) + 0.006 });
     }
   }
   // round trees: hedgerows in the fields, gardens in the town
@@ -288,7 +313,7 @@
       const x = a.p[0] + a.r[0] * side * off + rr(-3, 3), z = a.p[2] + a.r[2] * side * off + rr(-3, 3), nr = nearest(x, z);
       const y = height(x, z, nr);
       if (nr.d < 4.5 || y < 1.0 || inField(x, z) || !free(x, z, 1.4) || coastX(z) - x < 5) continue;
-      add('tree', { x, y: y - 0.1, z, ry: rr(0, 6.28), sx: rr(0.8, 1.3), s: nr.s, b: buildAt(nr.s + Math.max(0, nr.d - 10) * 0.3, 56) });
+      add('tree', { x, y: y - 0.1, z, ry: rr(0, 6.28), sx: rr(0.8, 1.3), s: nr.s, b: buildAt(nr.s + Math.max(0, nr.d - 10) * 0.3, 36) });
       clearOf.push([x, z, 1.4]);
       n++;
     }
@@ -302,7 +327,7 @@
       if (nr.d < 5.5 || fbm(x * 0.05, z * 0.05) < 0.4) continue;
       const y = height(x, z, nr), e = 1.2, slope = Math.abs(height(x + e, z) - height(x - e, z)) + Math.abs(height(x, z + e) - height(x, z - e));
       if (y < 2 || y > 58 || slope > 3.6 || !free(x, z, 0.9)) continue;
-      add(y > 44 ? 'pineSnow' : 'pine', { x, y: y - 0.15, z, ry: rr(0, 6.28), sx: rr(0.75, 1.35), s: nr.s, b: buildAt(nr.s + Math.max(0, nr.d - 10) * 0.25, 56) });
+      add(y > 44 ? 'pineSnow' : 'pine', { x, y: y - 0.15, z, ry: rr(0, 6.28), sx: rr(0.75, 1.35), s: nr.s, b: buildAt(nr.s + Math.max(0, nr.d - 10) * 0.25, 34) });
       clearOf.push([x, z, 0.9]);
       n++;
     }
@@ -311,12 +336,12 @@
       const s = rr(184, LEN), a = pathAt(s), side = rnd() < 0.5 ? -1 : 1, off = rr(4, 50);
       const x = a.p[0] + a.r[0] * side * off, z = a.p[2] + a.r[2] * side * off, nr = nearest(x, z);
       if (nr.d < 3.6 || !free(x, z, 1)) continue;
-      add('rock', { x, y: height(x, z, nr) - 0.3, z, ry: rr(0, 6.28), sx: rr(0.6, 1.8), sy: rr(0.5, 1.2), sz: rr(0.6, 1.6), s: nr.s, b: buildAt(nr.s, 50) });
+      add('rock', { x, y: height(x, z, nr) - 0.3, z, ry: rr(0, 6.28), sx: rr(0.6, 1.8), sy: rr(0.5, 1.2), sz: rr(0.6, 1.6), s: nr.s, b: buildAt(nr.s, 32) });
       n++;
     }
     const a = pathAt(LEN - 7), x = a.p[0] + a.r[0] * 3.3, z = a.p[2] + a.r[2] * 3.3;
-    add('station', { x, y: a.p[1] - 0.3, z, ry: Math.atan2(a.t[0], a.t[2]), s: LEN - 7, b: buildAt(LEN - 7, 46) });
-    for (const k of [-1, 1]) add('lamp', { x: x + a.t[0] * k * 4.6 + a.r[0] * 0.9, y: a.p[1] - 0.2, z: z + a.t[2] * k * 4.6 + a.r[2] * 0.9, ry: 0, s: LEN - 7, b: buildAt(LEN - 7, 46) + 0.01 });
+    add('station', { x, y: a.p[1] - 0.3, z, ry: Math.atan2(a.t[0], a.t[2]), s: LEN - 7, b: buildAt(LEN - 7, 32) });
+    for (const k of [-1, 1]) add('lamp', { x: x + a.t[0] * k * 4.6 + a.r[0] * 0.9, y: a.p[1] - 0.2, z: z + a.t[2] * k * 4.6 + a.r[2] * 0.9, ry: 0, s: LEN - 7, b: buildAt(LEN - 7, 32) + 0.01 });
   }
   // clouds over the line, built by the cloudsmith as the journey goes
   const lastStop = pathAt(LEN - 7).p;
@@ -324,53 +349,143 @@
     const s = LEN * (k + 0.4) / 15, a = pathAt(s), side = k % 2 ? 1 : -1, off = rr(18, 60);
     const x = a.p[0] + a.r[0] * side * off, y = Math.max(48, a.p[1] + 34) + rr(-6, 10), z = a.p[2] + a.r[2] * side * off;
     if (Math.hypot(x - lastStop[0], z - lastStop[2]) < 60) continue;   // keep the summit view clear
-    add('cloud', { x, y, z, ry: rr(0, 6.28), sx: rr(0.9, 1.6), s, b: buildAt(s, 90) });
+    add('cloud', { x, y, z, ry: rr(0, 6.28), sx: rr(0.9, 1.6), s, b: buildAt(s, 70) });
   }
 
-  // clusters for the overlay boxes, and the build sites the crew works on
+  // ------------------------------------------------------------------ the crew's jobs
+  // Every job is one cursor building something: pulling a house up out of the ground, hopping from pine to pine,
+  // sweeping a field row by row, laying a fence. Each thing is built at the moment its cursor reaches it.
   const BOUNDS = {   // kind → [label, half width, height, half depth] in instance units
     sleeper: ['Track', 1, 0.3, 0.5], sunflower: ['Sunflower', 0.3, 1.4, 0.3], lavender: ['Lavender', 0.45, 0.9, 0.45], hay: ['Hay bale', 0.7, 1.2, 0.7],
     windmill: ['Windmill', 3.6, 11, 3.6], barn: ['Barn', 3.4, 5.6, 2.6], silo: ['Silo', 1.3, 7.6, 1.3], fence: ['Fence', 1.2, 1, 0.2],
-    house: ['House', 0.55, 1.5, 0.55], church: ['Church', 4, 13, 5], pier: ['Pier', 1.4, 1, 8], boat: ['Sailboat', 1, 5.2, 1.8],
+    house: ['House', 0.55, 1.5, 0.55], roof: ['Roof', 0.58, 0.45, 0.6], church: ['Church', 4, 13, 5], pier: ['Pier', 1.4, 1, 8], boat: ['Sailboat', 1, 5.2, 1.8],
     lighthouse: ['Lighthouse', 1.6, 11.5, 1.6], lamp: ['Lamp', 0.3, 2.6, 0.3], tree: ['Tree', 1.6, 3.8, 1.6],
     pine: ['Pine', 1.3, 4.6, 1.3], pineSnow: ['Pine', 1.3, 4.6, 1.3], rock: ['Rock', 1, 1.2, 1], station: ['Station', 5, 4.6, 2.4], cloud: ['Cloud', 7, 5, 4],
   };
-  // one box per field, per map cell or per stretch of line, so the boxes sit on what is being built
-  const clusters = [], byKey = new Map();
-  const keyOf = (kind, it, i) => {
-    if (kind === 'sleeper') return 's' + Math.floor(it.s / 26);
-    if (kind === 'fence' || kind === 'lamp') return 's' + Math.floor(it.s / 34);
-    if (it.field !== undefined) return 'f' + it.field;
-    if (kind === 'boat') return 'bay';
-    const G = { house: 16, tree: 22, pine: 20, pineSnow: 20, rock: 26 }[kind];
-    return G ? Math.floor(it.x / G) + ',' + Math.floor(it.z / G) : 'i' + i;
-  };
-  for (const [kind, list] of Object.entries(things)) {
-    const bd = BOUNDS[kind];
-    if (!bd) continue;
-    list.forEach((it, i) => {
-      const key = bd[0] + '|' + keyOf(kind, it, i);
-      let c = byKey.get(key);
-      if (!c) { c = { label: bd[0], n: 0, min: [1e9, 1e9, 1e9], max: [-1e9, -1e9, -1e9], b0: 1, b1: 0 }; byKey.set(key, c); clusters.push(c); }
-      const sx = it.sx || 1, sy = it.sy || sx, sz = it.sz || sx, r = Math.max(bd[1] * sx, bd[3] * sz);
-      c.n++;
-      c.min = [Math.min(c.min[0], it.x - r), Math.min(c.min[1], it.y), Math.min(c.min[2], it.z - r)];
-      c.max = [Math.max(c.max[0], it.x + r), Math.max(c.max[1], it.y + bd[2] * sy), Math.max(c.max[2], it.z + r)];
-      c.b0 = Math.min(c.b0, it.b); c.b1 = Math.max(c.b1, it.b + W);
-    });
+  for (const [kind, list] of Object.entries(things)) list.forEach((it) => { it.kind = kind; it.d = nearest(it.x, it.z).d; });
+  const tallOf = (it) => BOUNDS[it.kind][2] * (it.sy || it.sx || 1);
+  const sideOf = (it) => { const a = pathAt(it.s); return (it.x - a.p[0]) * a.r[0] + (it.z - a.p[2]) * a.r[2] > 0 ? 1 : -1; };
+  const HOP = 0.0095, LANE = 0.011, GAP = 0.019;   // in build progress: 0.0095 ≈ 0.19 s a pine
+  const jobs = [];
+  function job(type, roles, items, extra = {}) {
+    const n = items.length;
+    const dur = extra.dur ?? (type === 'raise' ? W : type === 'hop' ? n * HOP + W * 0.45 : Math.max(0.022, n * 0.0034));
+    const j = { type, roles, items, n, dur, want: Math.min(...items.map((it) => it.b)), deadline: Math.max(0.012, pOfS(Math.min(...items.map((it) => it.s)) - 1)),
+      label: BOUNDS[items[0].kind][0], glyph: type === 'raise' ? 'cross' : 'pen', ...extra };
+    jobs.push(j);
+    return j;
   }
-  // who can do which job: the first is the specialist, the others lend a hand
-  const BY = {
-    Track: ['tracklayer'], Terrain: ['renderer', 'terraformer'], Sunflower: ['painter', 'gardener'], Lavender: ['painter', 'gardener'],
-    'Hay bale': ['carpenter', 'shipwright'], Windmill: ['rigger', 'mason'], Barn: ['carpenter', 'mason'], Silo: ['mason'], Fence: ['carpenter', 'lamplighter', 'shipwright'],
-    House: ['mason', 'painter'], Church: ['mason'], Pier: ['shipwright'], Sailboat: ['shipwright', 'rigger'], Lighthouse: ['lamplighter', 'mason'], Lamp: ['lamplighter'],
-    Tree: ['gardener', 'terraformer'], Pine: ['gardener', 'terraformer', 'rigger'], Rock: ['terraformer', 'mason'], Station: ['carpenter', 'mason', 'lamplighter'],
-    Cloud: ['cloudsmith'], Train: ['conductor'],
+  const chunk = (list, n) => Array.from({ length: Math.ceil(list.length / n) }, (_, i) => list.slice(i * n, i * n + n));
+  const lined = (list) => list.slice().sort((a, b) => sideOf(a) - sideOf(b) || a.s - b.s);
+  const T = (k) => things[k] || [];
+  const EVERYONE = ['gardener', 'planter', 'stonecutter', 'mason', 'carpenter', 'rigger', 'roofer', 'shipwright', 'painter', 'lamplighter', 'cloudsmith'];
+  FIELDS.forEach((f, fi) => {   // fields are swept row by row, in two halves; hay bales are hopped
+    const plants = T(f.crop === 'sun' ? 'sunflower' : 'lavender').filter((it) => it.field === fi);
+    if (plants.length) f.y = plants.reduce((a, it) => a + it.y, 0) / plants.length;
+    if (f.crop === 'sun' || f.crop === 'lav') for (const half of [0, 1]) {
+      const items = plants.filter((it) => (it.u >= 0) === (half === 1));
+      if (items.length) job('sweep', f.crop === 'sun' ? ['painter', 'planter', 'gardener'] : ['planter', 'painter', 'gardener'], items,
+        { f, lanes: 4, u0: half ? 0 : -f.len / 2, u1: half ? f.len / 2 : 0, dur: 4 * LANE + W * 0.45 });
+    }
+    const hay = T('hay').filter((it) => it.field === fi).sort((a, b) => a.s - b.s);
+    if (hay.length) job('hop', ['carpenter', 'shipwright', 'rigger'], hay);
+  });
+  for (const it of T('windmill')) job('raise', ['rigger', 'mason', 'carpenter'], [it]);
+  for (const k of ['barn', 'silo', 'station', 'pier']) for (const it of T(k)) job('raise', ['carpenter', 'mason', 'shipwright'], [it]);
+  for (const it of T('church')) job('raise', ['mason', 'roofer'], [it]);
+  for (const it of T('lighthouse')) job('raise', ['mason', 'lamplighter', 'renderer'], [it]);
+  for (const it of T('cloud')) job('raise', ['cloudsmith', 'renderer'], [it], { cloud: true, glyph: 'pen' });
+  for (const side of [-1, 1]) for (const run of chunk(T('fence').filter((it) => sideOf(it) === side).sort((a, b) => a.s - b.s), 9)) {
+    job('lay', ['carpenter', 'lamplighter', 'shipwright', 'roofer'], run);
+  }
+  const houses = T('house').map((h, i) => [h, T('roof')[i]]).filter(([h]) => h.d < 34).sort((a, b) => sideOf(a[0]) - sideOf(b[0]) || a[0].s - b[0].s);
+  for (const grp of chunk(houses, 3)) {   // one cursor pulls up three houses, then drops their roofs on
+    job('hop', EVERYONE, [...grp.map(([h]) => h), ...grp.map(([, r]) => r)], { then: ['Roof', grp.length] });
+  }
+  for (const grp of chunk(lined(T('boat')), 4)) job('hop', ['shipwright', 'rigger'], grp);
+  for (const grp of chunk(lined(T('lamp')), 4)) job('hop', ['lamplighter', 'carpenter', 'shipwright'], grp);
+  for (const grp of chunk(lined(T('tree').filter((it) => it.d < 32)), 4)) job('hop', ['gardener', 'planter', 'painter', 'carpenter'], grp);
+  for (const grp of chunk(lined([...T('pine'), ...T('pineSnow')].filter((it) => it.d < 30)), 5)) job('hop', EVERYONE, grp);
+  for (const grp of chunk(lined(T('rock').filter((it) => it.d < 30)), 4)) job('hop', ['stonecutter', 'mason', 'rigger', 'gardener'], grp);
+
+  // fronts: the tracklayer runs ahead laying sleepers, two cursors draw the ground ahead, one the sea
+  const frontS = (p, lead) => Math.max(0, Math.min(((p - 0.006) / 0.06) * (S0 + lead + 10), trainS(p) + lead));
+  const groundAt = (s, L, sea) => { const a = pathAt(s), x = a.p[0] + a.r[0] * L, z = a.p[2] + a.r[2] * L; return [x, sea ? 0.35 : Math.max(0, height(x, z)) + 0.3, z]; };
+  const seaFront = (p) => { const L = 34 + 9 * Math.sin(Math.PI * 2 * p * 5); return groundAt(frontS(p, 84) - Math.max(0, L - 20) * 0.3, L, true); };
+  const fronts = [
+    { by: 'tracklayer', label: 'Track', p0: 0.006, p1: 0.955, fn: (p) => { const a = pathAt(frontS(p, 24)); return [a.p[0], a.p[1] + 0.3, a.p[2]]; } },
+    ...[0, 0.5].map((ph, i) => ({ by: i ? 'surveyor' : 'terraformer', label: 'Terrain', p0: 0.006, p1: 0.94,
+      fn: (p) => { const L = 24 * Math.sin(Math.PI * 2 * (p * 7 + ph)); return groundAt(frontS(p, 84) - Math.max(0, Math.abs(L) - 16) * 0.32, L); } })),
+  ];
+  {   // the renderer draws the sea while its front runs over open water
+    let a = -1, b = -1, best = [0, 0];
+    for (let p = 0.006; p < 0.95; p += 0.002) {
+      const q = seaFront(p), wet = coastX(q[2]) - q[0] < -3;
+      if (wet && a < 0) a = p;
+      if ((!wet || p >= 0.948) && a >= 0) { b = p; if (b - a > best[1] - best[0]) best = [a, b]; a = -1; }
+    }
+    if (best[1] - best[0] > 0.05) fronts.push({ by: 'renderer', label: 'Sea', p0: best[0], p1: best[1], fn: seaFront });
+  }
+
+  // hand the jobs out, in the order they are wanted, to whoever can start soonest and still beat the train there
+  const freeAt = {}, blocked = {};
+  for (const f of fronts) (blocked[f.by] = blocked[f.by] || []).push([f.p0, f.p1]);
+  const startFor = (by, want, dur) => {
+    let s = Math.max(want, (freeAt[by] ?? 0.004) + GAP);
+    for (const [a, b] of blocked[by] || []) if (s < b + GAP && s + dur > a - GAP) s = b + GAP;
+    return s;
   };
-  const centre = (c, p) => {   // where on screen a cluster is being worked on right now (follows the growth)
-    const g = cl((p - c.b0) / Math.max(W, c.b1 - c.b0));
-    return project([(c.min[0] + c.max[0]) / 2, c.min[1] + (c.max[1] - c.min[1]) * (0.35 + 0.45 * g), (c.min[2] + c.max[2]) / 2]);
-  };
+  jobs.sort((a, b) => a.want - b.want);
+  for (const j of jobs) {
+    let best = null;
+    for (const by of j.roles) { const s = startFor(by, j.want, j.dur); if (!best || s < best.s - 1e-9) best = { by, s }; }
+    if (best.s + j.dur * 0.4 > j.deadline) { j.skip = true; continue; }   // nobody can make it in time: it builds itself
+    j.p0 = best.s; j.by = best.by; freeAt[j.by] = j.p0 + j.dur;
+    const { items } = j;   // each thing is built when its cursor gets there
+    if (j.type === 'raise') items[0].b = j.p0;
+    else if (j.type === 'hop') items.forEach((it, k) => { it.b = j.p0 + k * HOP; });
+    else if (j.type === 'lay') items.forEach((it, k) => { it.b = j.p0 + (j.dur - W * 0.3) * (k / Math.max(1, items.length - 1)); });
+    else {
+      const w = j.f.wid / j.lanes;
+      for (const it of items) {
+        const lane = Math.min(j.lanes - 1, Math.max(0, Math.floor((it.v + j.f.wid / 2) / w)));
+        const f = cl((it.u - j.u0) / (j.u1 - j.u0));
+        it.b = j.p0 + (lane + (lane % 2 ? 1 - f : f)) * LANE;
+      }
+    }
+    j.bs = items.map((it) => it.b).sort((a, b) => a - b);
+  }
+  const live = jobs.filter((j) => !j.skip).sort((a, b) => a.p0 - b.p0);
+  // where each cursor is working right now, in the world
+  const lerp3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  const grown = (it, p) => sm(0, 0.55, (p - it.b) / W);
+  const topNow = (it, p) => [it.x, it.y + tallOf(it) * Math.max(0.06, grown(it, p)), it.z];
+  function workPoint(j, p) {
+    const its = j.items;
+    if (j.type === 'raise') {
+      const it = its[0];
+      if (j.cloud) { const w = BOUNDS.cloud[1] * (it.sx || 1); return [it.x - w + 2 * w * grown(it, p), it.y + 3, it.z]; }
+      return topNow(it, p);
+    }
+    if (j.type === 'hop') {
+      const tau = Math.max(0, p - j.p0), k = Math.min(its.length - 1, Math.floor(tau / HOP)), f = cl((tau - k * HOP) / HOP), here = topNow(its[k], p);
+      if (k === its.length - 1 || f < 0.55) return here;
+      const nx = its[k + 1];
+      return lerp3(here, [nx.x, nx.y + 0.3, nx.z], sm(0.55, 1, f));
+    }
+    if (j.type === 'lay') {
+      const n = its.length;
+      if (n === 1) return [its[0].x, its[0].y + 1, its[0].z];
+      const x = cl((p - j.p0) / Math.max(1e-6, j.dur - W * 0.3)) * (n - 1), k = Math.min(n - 2, Math.floor(x)), a = its[k], b = its[k + 1], f = x - k;
+      return [lerp(a.x, b.x, f), lerp(a.y, b.y, f) + 1.0, lerp(a.z, b.z, f)];
+    }
+    const f0 = j.f, tau = cl((p - j.p0) / (j.lanes * LANE)) * j.lanes, lane = Math.min(j.lanes - 1, Math.floor(tau)), fr = Math.min(1, tau - lane);
+    const u = lerp(j.u0, j.u1, lane % 2 ? 1 - fr : fr), v = -f0.wid / 2 + (lane + 0.5) * (f0.wid / j.lanes);
+    return [f0.c[0] + f0.u[0] * u - f0.u[1] * v, (f0.y || 1) + 1.1, f0.c[1] + f0.u[1] * u + f0.u[0] * v];
+  }
+  const countTo = (arr, p) => { let lo = 0, hi = arr.length; while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m] <= p) lo = m + 1; else hi = m; } return lo; };
+  const sleeperB = T('sleeper').map((it) => it.b).sort((a, b) => a - b);
+  let terrainB = [], seaB = [];
 
   // ------------------------------------------------------------------ Three.js
   let THREE;
@@ -584,16 +699,7 @@
     land.receiveShadow = true; land.castShadow = true; land.customDepthMaterial = groundDepth;
     land.frustumCulled = landWire.frustumCulled = false; landWire.renderOrder = 2;
     scene.add(land, landWire);
-    // terrain clusters for the overlay: the ground near the line, in squares
-    const tc = new Map();
-    for (let k = 0; k < t; k++) {
-      if (fd[k] > 30) continue;
-      const x = pos[k * 9], y = pos[k * 9 + 1], z = pos[k * 9 + 2], b = ab[k * 3], key = Math.floor(x / 40) + ',' + Math.floor(z / 40);
-      let c2 = tc.get(key);
-      if (!c2) { c2 = { label: 'Terrain', n: 0, min: [1e9, 1e9, 1e9], max: [-1e9, -1e9, -1e9], b0: 1, b1: 0 }; tc.set(key, c2); clusters.push(c2); }
-      c2.n++; c2.min = [Math.min(c2.min[0], x), Math.min(c2.min[1], y), Math.min(c2.min[2], z)]; c2.max = [Math.max(c2.max[0], x), Math.max(c2.max[1], y), Math.max(c2.max[2], z)];
-      c2.b0 = Math.min(c2.b0, b); c2.b1 = Math.max(c2.b1, b + W);
-    }
+    terrainB = Float32Array.from({ length: t }, (_, k) => ab[k * 3]).sort();
   }
   // -- the sea, with low-poly waves
   {
@@ -613,6 +719,7 @@
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('aBuild', new THREE.BufferAttribute(ab, 1));
     g.computeVertexNormals();
+    seaB = Float32Array.from({ length: t }, (_, k) => ab[k * 3]).sort();
     const water = new THREE.Mesh(g, sea), waterWire = new THREE.Mesh(g, seaWire);
     water.receiveShadow = true; water.frustumCulled = waterWire.frustumCulled = false; water.renderOrder = 1; waterWire.renderOrder = 2;
     scene.add(water, waterWire);
@@ -715,67 +822,175 @@
     return x < -40 || y < -40 || x > r.right + 40 || y > r.bottom + 40 ? null : { x, y };
   };
   const fmt = (n) => n.toLocaleString('en-US');
+  const box8 = (x, z, rx, rz, y0, y1) => [[x - rx, y0, z - rz], [x + rx, y0, z - rz], [x - rx, y0, z + rz], [x + rx, y0, z + rz], [x - rx, y1, z - rz], [x + rx, y1, z - rz], [x - rx, y1, z + rz], [x + rx, y1, z + rz]];
+  function jobPoints(j, p) {   // what this job has built so far, and where its cursor is
+    const pts = [workPoint(j, p)];
+    if (j.type === 'sweep') {
+      const f = j.f, w = f.wid / j.lanes, tau = cl((p - j.p0) / (j.lanes * LANE)) * j.lanes, lane = Math.min(j.lanes - 1, Math.floor(tau));
+      const uA = j.u0, uB = lane === 0 ? lerp(j.u0, j.u1, Math.min(1, tau)) : j.u1, vB = -f.wid / 2 + (lane + 1) * w;
+      for (const [u, v] of [[uA, -f.wid / 2], [uB, -f.wid / 2], [uA, vB], [uB, vB]]) for (const y of [f.y || 1, (f.y || 1) + 1.3]) {
+        pts.push([f.c[0] + f.u[0] * u - f.u[1] * v, y, f.c[1] + f.u[1] * u + f.u[0] * v]);
+      }
+      return pts;
+    }
+    for (const it of j.items) {
+      if (it.b > p) continue;
+      const bd = BOUNDS[it.kind], sx = it.sx || 1, r = Math.max(bd[1] * sx, bd[3] * (it.sz || sx));
+      pts.push(...box8(it.x, it.z, r, r, it.y, it.y + tallOf(it) * Math.max(0.06, grown(it, p))));
+    }
+    return pts;
+  }
+  function frontPoints(f, p) {
+    if (f.label === 'Track') {
+      const s1 = frontS(p, 24), pts = [];
+      for (const s0 of [s1 - 10, s1]) { const a = pathAt(s0); for (const k of [-1.3, 1.3]) pts.push([a.p[0] + a.r[0] * k, a.p[1] - 0.2, a.p[2] + a.r[2] * k], [a.p[0] + a.r[0] * k, a.p[1] + 0.5, a.p[2] + a.r[2] * k]); }
+      return pts;
+    }
+    const q = f.fn(p);
+    return box8(q[0], q[2], 8, 8, q[1] - 0.5, q[1] + 0.5);
+  }
   function drawMarks(p) {
     const r = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
     if (marks.width !== Math.round(r.width * dpr)) { marks.width = Math.round(r.width * dpr); marks.height = Math.round(r.height * dpr); }
     mx.setTransform(dpr, 0, 0, dpr, 0, 0);
     mx.clearRect(0, 0, r.width, r.height);
-    if (p <= 0 || p >= 1.05) return;
+    if (p <= 0.002 || p >= 1) return;
     mx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
     mx.textBaseline = 'middle';
-    const taken = [];
-    for (const c of clusters) {
-      const a = Math.min(sm(c.b0 - 0.004, c.b0 + 0.004, p), 1 - sm(c.b1 + 0.01, c.b1 + 0.03, p));
-      if (a <= 0.01) continue;
+    const scr = (q) => {
+      viewP.set(q[0], q[1], q[2]).applyMatrix4(camera.matrixWorldInverse);
+      if (viewP.z > -camera.near) return null;
+      corners.set(q[0], q[1], q[2]).project(camera);
+      return [(corners.x * 0.5 + 0.5) * r.width, (0.5 - corners.y * 0.5) * r.height];
+    };
+    const taken = [], labels = [];
+    const mark = (pts, text, a) => {
       let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, ok = 0;
-      for (let k = 0; k < 8; k++) {
-        const q = [k & 1 ? c.max[0] : c.min[0], k & 2 ? c.max[1] : c.min[1], k & 4 ? c.max[2] : c.min[2]];
-        viewP.set(q[0], q[1], q[2]).applyMatrix4(camera.matrixWorldInverse);
-        if (viewP.z > -camera.near) continue;
-        corners.set(q[0], q[1], q[2]).project(camera);
-        const sx = (corners.x * 0.5 + 0.5) * r.width, sy = (0.5 - corners.y * 0.5) * r.height;
-        x0 = Math.min(x0, sx); y0 = Math.min(y0, sy); x1 = Math.max(x1, sx); y1 = Math.max(y1, sy); ok++;
-      }
-      if (ok < 4) continue;
-      x0 = Math.max(x0, -2); y0 = Math.max(y0, -2); x1 = Math.min(x1, r.width + 2); y1 = Math.min(y1, r.height + 2);
-      const w = x1 - x0, h = y1 - y0;
-      if (w < 10 || h < 8 || w > r.width * 0.72 || h > r.height * 0.72) continue;
+      for (const q of pts) { const s2 = scr(q); if (!s2) continue; ok++; x0 = Math.min(x0, s2[0]); y0 = Math.min(y0, s2[1]); x1 = Math.max(x1, s2[0]); y1 = Math.max(y1, s2[1]); }
+      if (ok < 2 || x1 < 0 || y1 < 0 || x0 > r.width || y0 > r.height) return;
+      x0 -= 3; y0 -= 3; x1 += 3; y1 += 3;
+      if (x1 - x0 > r.width * 0.7 || y1 - y0 > r.height * 0.7) return;
       mx.globalAlpha = a;
       mx.strokeStyle = CORAL; mx.lineWidth = 1;
-      mx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(w), Math.round(h));
+      mx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(x1 - x0), Math.round(y1 - y0));
       mx.fillStyle = '#fff';
-      for (const [hx, hy] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) { mx.fillRect(Math.round(hx) - 2, Math.round(hy) - 2, 5, 5); mx.strokeRect(Math.round(hx) - 2 + 0.5, Math.round(hy) - 2 + 0.5, 4, 4); }
-      const text = c.n > 1 ? c.label + ' ×' + fmt(c.n) : c.label, tw = mx.measureText(text).width + 12;
-      const lx = Math.round(Math.min(Math.max(x0, 4), r.width - tw - 4)), ly = Math.round(y0 - 20);
+      for (const [hx, hy] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) { mx.fillRect(Math.round(hx) - 2, Math.round(hy) - 2, 5, 5); mx.strokeRect(Math.round(hx) - 1.5, Math.round(hy) - 1.5, 4, 4); }
+      labels.push([x0, y0, text, a]);
+    };
+    for (const f of fronts) {
+      const a = Math.min(sm(f.p0, f.p0 + 0.01, p), 1 - sm(f.p1, f.p1 + 0.015, p));
+      if (a > 0.01) mark(frontPoints(f, p), f.label + ' ×' + fmt(countTo(f.label === 'Track' ? sleeperB : f.label === 'Sea' ? seaB : terrainB, p)), a * 0.9);
+    }
+    for (const j of live) {
+      if (j.p0 > p + 0.003) break;
+      const end = j.p0 + j.dur;
+      if (p > end + 0.03) continue;
+      const a = Math.min(sm(j.p0 - 0.003, j.p0 + 0.003, p), 1 - sm(end + 0.01, end + 0.03, p));
+      if (a <= 0.01) continue;
+      const n = countTo(j.bs, p);
+      mark(jobPoints(j, p), j.then && n > j.then[1] ? j.then[0] + ' ×' + fmt(n - j.then[1]) : j.n > 1 ? j.label + ' ×' + fmt(j.then ? Math.min(n, j.then[1]) : n) : j.label, a);
+      if (j.type === 'hop' || j.type === 'raise') for (const it of j.items) {   // a click as each one is set in place
+        const k = (p - it.b - W * 0.55) / 0.012;
+        if (k < 0 || k > 1) continue;
+        const s2 = scr(topNow(it, p));
+        if (!s2) continue;
+        mx.globalAlpha = (1 - k) * a; mx.strokeStyle = CORAL; mx.lineWidth = 1.5;
+        mx.beginPath(); mx.arc(s2[0], s2[1], 3 + 15 * k, 0, Math.PI * 2); mx.stroke();
+      }
+    }
+    for (const [x0, y0, text, a] of labels) {   // labels last, never on top of each other
+      const tw = mx.measureText(text).width + 12, lx = Math.round(Math.min(Math.max(x0, 4), r.width - tw - 4)), ly = Math.round(y0 - 19);
       if (ly < 2 || taken.some((q) => lx < q[0] + q[2] + 4 && lx + tw + 4 > q[0] && ly < q[1] + 18 && ly + 18 > q[1])) continue;
       taken.push([lx, ly, tw]);
-      mx.fillStyle = CORAL;
+      mx.globalAlpha = a; mx.fillStyle = CORAL;
       mx.beginPath(); mx.roundRect(lx, ly, tw, 16, 4); mx.fill();
       mx.fillStyle = '#fff'; mx.fillText(text, lx + 6, ly + 8.5);
     }
     mx.globalAlpha = 1;
   }
 
-  // ------------------------------------------------------------------ build sites for the crew
-  // sixty jobs spread evenly over the journey; each goes to whoever has been idle longest
-  {
-    const pool = clusters.filter((c) => BY[c.label]).sort((a, b) => a.b0 - b.b0), last = { conductor: 0.004 };
-    const chosen = [{ label: 'Train', b0: 0.004, by: 'conductor', train: true }];
-    const SLOTS = 60, T1 = 0.93;
-    for (let k = 0; k < SLOTS; k++) {
-      const w0 = (k * T1) / SLOTS, w1 = ((k + 1) * T1) / SLOTS;
-      let best = null, idle = -1;
-      for (const c of pool) {
-        if (c.used || c.b0 < w0 - 0.01 || c.b0 >= w1) continue;
-        for (const by of BY[c.label]) { const d = c.b0 - (last[by] ?? -1); if (d >= 0.035 && d > idle) { idle = d; best = { c, by }; } }
-      }
-      if (best) { best.c.used = true; last[best.by] = best.c.b0; chosen.push({ ...best.c, by: best.by }); }
-    }
-    chosen.forEach((c, i) => {
-      const fn = c.train ? () => project(loco.position.toArray().map((v, k) => v + (k === 1 ? 1.6 : 0))) : () => centre(c, build);
-      swarm.anchor('site-' + i, fn, { at: Math.max(0, c.b0 - 0.012), by: c.by, hold: 0.9, label: false, say: 'building ' + c.label.toLowerCase() });
-    });
+  // ------------------------------------------------------------------ what each of them says it is doing, and has done
+  const WORK = {   // kind: [doing, done, plural]
+    sunflower: ['sowing', 'sowed', 'sunflowers'], lavender: ['sowing', 'sowed', 'lavender'], hay: ['rolling', 'rolled', 'hay bales'],
+    fence: ['setting', 'set', 'fence posts'], house: ['building', 'built', 'houses'], boat: ['mooring', 'moored', 'sailboats'],
+    lamp: ['lighting', 'lit', 'lamps'], tree: ['planting', 'planted', 'trees'], pine: ['planting', 'planted', 'pines'], pineSnow: ['planting', 'planted', 'pines'],
+    rock: ['placing', 'placed', 'rocks'], roof: ['roofing', 'roofed', 'houses'],
+  };
+  const RAISE = { windmill: 'the windmill', barn: 'the barn', silo: 'the silo', station: 'the station', pier: 'the pier', church: 'the church', lighthouse: 'the lighthouse', cloud: 'a cloud' };
+  const raiseVerb = (k) => (k === 'cloud' ? ['shaping', 'shaped'] : k === 'pier' ? ['laying', 'laid'] : k === 'barn' ? ['framing', 'framed'] : ['raising', 'raised']);
+  function doing(j) {
+    const kind = j.items[0].kind, w = WORK[kind];
+    if (j.type === 'raise') return raiseVerb(kind)[0] + ' ' + RAISE[kind];
+    if (j.type === 'sweep') return w[0] + ' ' + w[2] + ', row ' + Math.min(j.lanes, 1 + Math.floor(Math.max(0, build - j.p0) / LANE)) + '/' + j.lanes;
+    const k = Math.max(1, countTo(j.bs, build));
+    if (j.then) return k > j.then[1] ? 'roofing ' + (k - j.then[1]) + '/' + j.then[1] : 'building houses ' + k + '/' + j.then[1];
+    return w[0] + ' ' + w[2] + ' ' + Math.min(k, j.n) + '/' + j.n;
   }
+  // where a piece of work was done, by the nearest landmark, or failing that the lie of the land
+  const MARKS = [['windmill', ['by the windmill', 'under the windmill']], ['barn', ['by the barn', 'at the farm']], ['church', ['in town', 'by the church', 'on the square']],
+    ['lighthouse', ['out on the point', 'by the lighthouse']], ['pier', ['down by the harbour', 'on the quay', 'along the harbour road']], ['station', ['up at the station', 'by the station']]]
+    .flatMap(([k, words]) => T(k).map((it) => ({ x: it.x, z: it.z, words })));
+  const LAND = { ridge: ['up on the ridge', 'below the summit'], hills: ['in the hills', 'on the slope'], shore: ['along the shore'], line: ['beside the line', 'along the track'] };
+  function where(items) {
+    const x = items.reduce((a, it) => a + it.x, 0) / items.length, z = items.reduce((a, it) => a + it.z, 0) / items.length, y = items.reduce((a, it) => a + it.y, 0) / items.length;
+    let best = null, bd = 42;
+    for (const m of MARKS) { const d = Math.hypot(m.x - x, m.z - z); if (d < bd) { bd = d; best = m.words; } }
+    const words = best || LAND[y > 12 ? 'ridge' : y > 5 ? 'hills' : y < 1.6 ? 'shore' : 'line'];
+    return words[Math.abs(Math.round(x * 3 + z * 7)) % words.length];   // the same place always gets the same words
+  }
+  function did(j) {
+    const kind = j.items[0].kind, w = WORK[kind];
+    if (j.type === 'raise') return raiseVerb(kind)[1] + ' ' + RAISE[kind];
+    if (j.then) return 'built ' + j.then[1] + ' houses ' + where(j.items);
+    return w[1] + ' ' + fmt(j.n) + ' ' + (j.n === 1 ? w[2].replace(/s$/, '') : w[2]) + (j.type === 'sweep' ? '' : ' ' + where(j.items));
+  }
+  const groundDoing = (f) => { const y = f.fn(build)[1]; return y > 16 ? 'raising the peaks' : y > 5 ? 'shaping the hills' : y < 1 ? 'shaping the shore' : 'grading the valley'; };
+  const frontDoing = { Track: () => 'laying track', Terrain: groundDoing, Sea: () => 'painting the sea' };
+  const frontDid = { Track: () => 'laid ' + fmt(sleeperB.length) + ' sleepers', Terrain: () => 'finished the terrain', Sea: () => 'painted the sea' };
+
+  // the log keeps a line for finished work, never more than one every 0.3 s; clouds go unremarked
+  const events = [
+    ...live.filter((j) => !j.cloud).map((j) => ({ p: j.p0 + j.dur, by: j.by, text: did(j), big: j.type === 'raise' || j.type === 'sweep' })),
+    ...fronts.map((f) => ({ p: f.p1, by: f.by, text: frontDid[f.label](), big: true })),
+    { p: 1, by: 'conductor', text: 'pulled into the station', big: true },
+  ].sort((a, b) => a.p - b.p);
+  const shown = [];
+  for (const e of events) {
+    const prev = shown[shown.length - 1];
+    if (prev && e.p - prev.p < 0.3 / DUR) { if (e.big && !prev.big) shown[shown.length - 1] = e; continue; }
+    if (!e.big && shown.slice(-2).some((q) => q.text === e.text)) continue;   // a log that says something new
+    shown.push(e);
+  }
+  const allB = Object.values(things).flat().map((it) => it.b).sort((a, b) => a - b);
+  const sessionEl = document.querySelector('.session'), logEl = document.querySelector('.log');
+  const nEl = sessionEl.querySelector('.n'), tEl = sessionEl.querySelector('.t');
+  const clockOf = (sec) => Math.floor(sec / 60) + ':' + (sec % 60).toFixed(1).padStart(4, '0');
+  let logged = 0, lastN = -1, lastT = '';
+  function session(p) {
+    if (p + 1e-6 < (shown[logged - 1]?.p ?? 0)) { logged = 0; logEl.replaceChildren(); }   // built again from the start
+    const n = countTo(allB, p);
+    if (n !== lastN) { lastN = n; nEl.textContent = fmt(n) + ' objects'; }
+    const tt = p >= 1 ? 'built in ' + clockOf(DUR) : clockOf(p * DUR);
+    if (tt !== lastT) { lastT = tt; tEl.textContent = tt; }
+    if (reduce || build >= 1 && logged === 0) return;
+    while (logged < shown.length && shown[logged].p <= p) {
+      const e = shown[logged++], li = document.createElement('li');
+      li.innerHTML = '<time>' + clockOf(Math.min(DUR, e.p * DUR)) + '</time><b><i></i></b><span></span>';
+      li.querySelector('i').style.setProperty('--c', crew[e.by]);
+      li.querySelector('b').append(e.by);
+      li.querySelector('span').textContent = e.text;
+      logEl.append(li);
+      while (logEl.children.length > 5) logEl.firstChild.remove();
+    }
+  }
+
+  // ------------------------------------------------------------------ the crew: every job above is a build site
+  const at = (q) => q && project(q);
+  swarm.anchor('train', () => at([loco.position.x, loco.position.y + 1 + 2 * sm(0.004, 0.036, build), loco.position.z]), { at: 0.004, by: 'conductor', hold: 0.034 * DUR, label: false, pin: false, glyph: 'cross', doing: 'placing the train' });
+  swarm.anchor('ride', () => at([loco.position.x, loco.position.y + 3.4, loco.position.z]), { at: 0.06, by: 'conductor', hold: 0.93 * DUR, label: false, pin: false,
+    doing: () => (build < 0.9 ? 'driving the train' : 'pulling into the station') });
+  fronts.forEach((f, i) => swarm.anchor('front-' + i, () => at(f.fn(build)), { at: f.p0, by: f.by, hold: (f.p1 - f.p0) * DUR, label: false, pin: false, glyph: 'pen', doing: () => frontDoing[f.label](f) }));
+  live.forEach((j, i) => swarm.anchor('job-' + i, () => at(workPoint(j, build)), { at: j.p0, by: j.by, hold: j.dur * DUR, label: false, pin: false, glyph: j.glyph, doing: () => doing(j) }));
   swarm.start();
 
   // ------------------------------------------------------------------ render
@@ -852,6 +1067,7 @@
     glowMat.size = lerp(2.4, 6, e);
     gl.render(scene, camera);
     drawMarks(p);
+    session(p);
   }
 
   let last = performance.now(), readySent = false, fontsReady = false;

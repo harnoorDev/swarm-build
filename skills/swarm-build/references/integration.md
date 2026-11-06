@@ -185,7 +185,7 @@ viewer.addEventListener('load', () => swarm.ready(viewer));
 
 ### A scene that builds itself, with the crew on site
 
-When the scene animates its own construction (a city going up, a product assembling, a level being laid out), drop the wipe and give the crew jobs inside it. `examples/3d.html` builds a whole Three.js world this way, just ahead of a steam train, with no text on the page:
+When the scene animates its own construction (a city going up, a product assembling, a level being laid out), drop the wipe and give the crew jobs inside it. `examples/3d.html` builds a whole Three.js world this way, just ahead of a steam train, and every agent's tag says what it is doing:
 
 ```html
 <canvas id="world" data-swarm-step="scene" data-swarm-sweep="none" data-swarm-duration="20" data-swarm-await></canvas>
@@ -200,12 +200,12 @@ canvas.addEventListener('swarm:scene', (e) => { build = e.detail.progress; });
 // each site: who works there, and when (scene progress); fn follows the point as it moves or grows
 swarm
   .anchor('plaza', () => toScreen(plaza), { at: 0, by: 'surveyor', say: 'staking out the plaza', label: false })
-  .anchor('tower', () => toScreen(towerRoofAt(build)), { at: 0.11, by: 'mason', hold: 1.6, say: 'topping out the tower' })
+  .anchor('tower', () => toScreen(towerRoofAt(build)), { at: 0.11, by: 'mason', hold: 1.6, glyph: 'cross', doing: () => 'topping out, floor ' + floorAt(build) })
   .anchor('lamps', () => toScreen(lamp), { at: 0.8, by: 'electrician', say: 'switching on the street lamps' });
 swarm.start();
 ```
 
-Tie each site to something the scene is visibly doing at that progress, and point `fn` at where it is happening right now (the roof as it rises, the edge of the paving as it spreads), so the cursor is always on the work. If the camera moves during the build, agents stay with their last site until their next one. Without WebGL, or before the first frame, return `null`: the agent waits where it is.
+Tie each site to something the scene is visibly doing at that progress, and point `fn` at where it is happening right now (the roof as it rises, the edge of the paving as it spreads), so the cursor is always on the work, and give it a `doing` line so the visitor can read what it is building. If the camera moves during the build, agents stay with their last site a beat, then head for their next one. Without WebGL, or before the first frame, return `null`: the agent waits where it is.
 
 ### Things to know
 

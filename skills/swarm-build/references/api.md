@@ -114,8 +114,11 @@ An anchor registered with `at` is a build site: while the scene is at that progr
 | `say` | `building <name>` | The trace line, attributed to that agent. |
 | `label` | the name | Pin text; `false` for a bare ring. |
 | `on` | the first scene on the page | The scene element, or a selector, the site belongs to. |
+| `glyph` | `'arrow'` | The cursor the agent works with: `'arrow'`, `'cross'`, `'ibeam'` or `'pen'`. Anything but the arrow sits right on the point. |
+| `pin` | `true` | `false` leaves out the ring, for scenes that draw their own marks. |
+| `doing` | none | A line, or a function returning one, shown under the agent's name while it works ("planting pines 3/5"). Called every frame, so it can count. |
 
-`fn` is called every frame, so the agent follows a point that moves or grows (a roof as the building rises). Once its work is done, the agent stays with the point until its next site or the end of the build, so a moving camera never leaves it hanging in mid-air; if the point passes out of view, the agent slips off the nearest edge until its next job. Register sites before the region builds; up to 64 per scene.
+`fn` is called every frame, so the agent follows a point that moves or grows (a roof as the building rises). Once its work is done, the agent stays with the point a beat, then (with more than a second to spare) heads for its next site and waits there, so a moving camera never leaves it hanging in mid-air; if the point it follows passes out of view, it slips off the nearest edge. While a scene has sites, name tags keep clear of each other: a tag that would cover another flips to a free side of its cursor. Register sites before the region builds; up to 256 per scene.
 
 The app can also dispatch `swarm:ready` on the element itself instead of calling `swarm.ready(el)`.
 

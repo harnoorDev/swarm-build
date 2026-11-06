@@ -54,7 +54,8 @@ const OUTLINED = (d) => `<path d="${d}" fill="none" stroke="#0b0b0a" stroke-widt
 const GLYPHS =
   '<svg class="sb-g sb-g--arrow" width="18" height="22" viewBox="0 0 18 22"><path d="M2 1.5v16.1l4.3-4 2.9 6.6 2.8-1.2-2.8-6.5H15z" fill="var(--c)" stroke="#0b0b0a" stroke-width="1.3" stroke-linejoin="round"/></svg>' +
   '<svg class="sb-g sb-g--ibeam" width="12" height="24" viewBox="0 0 12 24">' + OUTLINED('M2.5 2.5h7M6 2.5v19M2.5 21.5h7') + '</svg>' +
-  '<svg class="sb-g sb-g--cross" width="22" height="22" viewBox="0 0 22 22">' + OUTLINED('M11 1.5v7M11 13.5v7M1.5 11h7M13.5 11h7') + '</svg>';
+  '<svg class="sb-g sb-g--cross" width="22" height="22" viewBox="0 0 22 22">' + OUTLINED('M11 1.5v7M11 13.5v7M1.5 11h7M13.5 11h7') + '</svg>' +
+  '<svg class="sb-g sb-g--pen" width="22" height="22" viewBox="0 0 22 22"><path d="M2 20l1.7-5.7L14.6 3.4a2 2 0 0 1 2.8 0l1.2 1.2a2 2 0 0 1 0 2.8L7.7 18.3z" fill="var(--c)" stroke="#0b0b0a" stroke-width="1.3" stroke-linejoin="round"/><path d="M2 20l1.7-5.7 4 4z" fill="#0b0b0a"/></svg>';
 
 const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
 const store = (s) => ({
@@ -166,7 +167,7 @@ export function swarmBuild(options = {}) {
     .filter(([, s]) => s.at != null && (s.on ? (typeof s.on === 'string' ? el.matches(s.on) : s.on === el) : el === firstScene()))
     .map(([name, s]) => ({ ...s, name, at: Math.min(1, Math.max(0, +s.at || 0)) }))
     .sort((p, q) => p.at - q.at)
-    .slice(0, 64);
+    .slice(0, 256);
 
   // ---------------------------------------------------------------- text helpers
   const remember = (el) => { if (!originals.has(el)) originals.set(el, el.innerHTML); };
@@ -258,16 +259,39 @@ export function swarmBuild(options = {}) {
       const el = put('sb-ag');
       el.dataset.g = 'arrow';
       el.style.setProperty('--c', o.crew[id]);
-      el.innerHTML = '<div class="sb-ag__in" style="animation-delay:' + (-i * 0.37).toFixed(2) + 's">' + GLYPHS + '<span class="sb-ag__tag">' + esc(id) + '</span></div>';
+      el.innerHTML = '<div class="sb-ag__in" style="animation-delay:' + (-i * 0.37).toFixed(2) + 's">' + GLYPHS + '<span class="sb-ag__tag">' + esc(id) + '<span class="sb-ag__do"></span></span></div>';
       const caret = put('sb-caret');
       caret.style.background = o.crew[id];
       const a = { id, el, caret, x: -999, y: -999 };
       a.set = (x, y) => { a.x = x; a.y = y; el.style.transform = `translate3d(${x}px,${y}px,0)`; };
+      a.tag = el.querySelector('.sb-ag__tag'); a.now = ''; a.tw = 0; a.side = 0;
+      const line = el.querySelector('.sb-ag__do');
+      a.doing = (txt) => {   // what it says it is doing, a second line on its name tag
+        txt = txt ? String(txt) : '';
+        if (txt === a.now) return;
+        a.now = txt; a.tw = 0;
+        if (txt) line.textContent = txt;
+        el.classList.toggle('is-doing', !!txt);
+      };
       a.set(-9999, -9999);
       A[id] = a;
       agentsUsed.add(id);
     });
     const crew = Object.values(A);
+    // name tags keep clear of each other: a tag that would cover another flips to a free side of its cursor
+    const SIDES = [(w) => [12, 16], (w) => [-w - 6, 16], (w, h) => [24, -h - 8], (w, h) => [-w - 6, -h - 8]];
+    const tidy = () => {
+      const placed = [];
+      const free = (r) => !placed.some((q) => r[0] < q[0] + q[2] + 3 && r[0] + r[2] + 3 > q[0] && r[1] < q[1] + q[3] + 2 && r[1] + r[3] + 2 > q[1]);
+      for (const ag of crew.filter((c) => c.x > -500 && c.y > -500).sort((c, d) => (d.now ? 1 : 0) - (c.now ? 1 : 0))) {
+        if (!ag.tw) { ag.tw = ag.tag.offsetWidth; ag.th = ag.tag.offsetHeight; }
+        const at = (k) => { const [dx, dy] = SIDES[k](ag.tw, ag.th); return [ag.x + dx, ag.y + dy, ag.tw, ag.th]; };
+        let k = ag.side;
+        if (!free(at(k))) k = [0, 1, 2, 3].find((i) => free(at(i))) ?? ag.side;
+        placed.push(at(k));
+        if (k !== ag.side) { ag.side = k; const [dx, dy] = SIDES[k](ag.tw, ag.th); ag.tag.style.left = dx + 'px'; ag.tag.style.top = dy + 'px'; }
+      }
+    };
 
     // primitives
     const go = (a, x, y, t, d = 0.45, ease = 'out') => {
@@ -433,26 +457,46 @@ export function swarmBuild(options = {}) {
     };
     // agent `ag` travels to a scene point at `t`, then holds on to it for `hold` seconds under a pin,
     // and then `stay`s with it (no pin) so a moving camera never leaves it hanging in mid-air
-    function visit(ag, at, t, hold, text, color, stay = 0) {
-      const pin = put('sb-pin');
-      pin.style.setProperty('--c', color);
-      if (text === false) pin.classList.add('sb-pin--bare'); else pin.innerHTML = '<span>' + esc(text) + '</span>';
-      pin.style.opacity = 0;
+    // `look`: { glyph } is the cursor it works with (arrow, cross, ibeam or pen), { pin: false } leaves out the ring,
+    // { doing } a line (or a function returning one) shown under its name while it works, { next } where it goes after
+    function visit(ag, at, t, hold, text, color, stay = 0, look = {}) {
+      const g = look.glyph || 'arrow', off = g === 'arrow' ? 6 : 0;   // the arrow points at its work, the others sit on it
+      const pin = look.pin === false ? null : put('sb-pin');
+      if (pin) {
+        pin.style.setProperty('--c', color);
+        if (text === false) pin.classList.add('sb-pin--bare'); else pin.innerHTML = '<span>' + esc(text) + '</span>';
+        pin.style.opacity = 0;
+      }
       let fx = 0, fy = 0;
       glyph(ag, 'arrow', t);
-      tl.tween(t, 0.35, 'out', (p) => { const q = at(); if (q) ag.set(fx + (q.x + 6 - fx) * p, fy + (q.y + 6 - fy) * p); }, () => { fx = ag.x; fy = ag.y; });
+      if (g !== 'arrow') { glyph(ag, g, t + 0.3); glyph(ag, 'arrow', t + 0.35 + hold); }
+      tl.tween(t, 0.35, 'out', (p) => { const q = at(); if (q) ag.set(fx + (q.x + off - fx) * p, fy + (q.y + off - fy) * p); }, () => { fx = ag.x; fy = ag.y; });
+      const doing = look.doing;
       tl.tween(t + 0.35, hold, 'linear', (p) => {
+        if (doing) ag.doing(p >= 1 ? '' : typeof doing === 'function' ? doing() : doing);
         const q = at();
-        if (!q) { pin.style.opacity = 0; return; }
-        ag.set(q.x + 6, q.y + 6);                      // keeps hold of a point that is moving
+        if (!q) { if (pin) pin.style.opacity = 0; return; }
+        ag.set(q.x + off, q.y + off);                  // keeps hold of a point that is moving
+        if (!pin) return;
         pin.style.left = q.x + 'px';
         pin.style.top = q.y + 'px';
         pin.style.opacity = p >= 1 ? 0 : Math.min(1, (p * hold) / 0.15, ((1 - p) * hold) / 0.15);
       });
-      // stays with the point; once it has passed out of view, slips off the nearest side until its next job
-      if (stay > 0.05) tl.tween(t + 0.35 + hold, stay, 'linear', () => {
-        const q = at();
-        if (q) { ag.set(q.x + 6, q.y + 6); return; }
+      // stays with the point a beat, then heads for its next job and waits there; whatever it follows,
+      // once that has passed out of view it slips off the nearest side
+      const nx = look.next, beat = nx && stay > 0.9 ? 0.3 : Infinity;
+      let sx = null, sy = 0, s0 = 0;
+      if (stay > 0.05) tl.tween(t + 0.35 + hold, stay, 'linear', (p) => {
+        const e = p * stay, n = e > beat ? nx.at() : null;
+        if (n) {
+          if (sx === null) { sx = ag.x; sy = ag.y; s0 = e; }
+          const k = 1 - (1 - Math.min(1, (e - s0) / 0.55)) ** 3;
+          ag.set(sx + (n.x + nx.off - sx) * k, sy + (n.y + nx.off - sy) * k);
+          return;
+        }
+        sx = null;
+        const q = e > beat ? null : at();
+        if (q) { ag.set(q.x + off, q.y + off); return; }
         const v = view(), tx = ag.x < (v.x0 + v.x1) / 2 ? v.x0 - 90 : v.x1 + 90;
         ag.set(ag.x + (tx - ag.x) * 0.08, ag.y);
       });
@@ -533,10 +577,12 @@ export function swarmBuild(options = {}) {
         // stay with the site until the next job, or the end of the build (the renderer returns to its scan line)
         const stay = s.ag === a && !still ? 0 : Math.max(0, (next ? next.t : tS + D) - (s.t + 0.35 + hold));
         log(s.ag.id, s.say || 'building ' + s.name, s.t + 0.3);
-        const done = visit(s.ag, project(s.fn), s.t, hold, s.label === false ? false : s.label || s.name, o.crew[s.ag.id] || color, stay);
+        const look = next ? { ...s, next: { at: project(next.fn), off: (next.glyph || 'arrow') === 'arrow' ? 6 : 0 } } : s;
+        const done = visit(s.ag, project(s.fn), s.t, hold, s.label === false ? false : s.label || s.name, o.crew[s.ag.id] || color, stay, look);
         if (s.ag === a) rBusy.push([s.t, done + stay]);
         end = Math.max(end, done);
       });
+      if (sites.length) tl.tween(ts, Math.max(end, tS + D) - ts + 0.4, 'linear', tidy);
       if (!a) return end;
       glyph(a, 'arrow', tS + D + 0.05);
       // inspect points inside the scene: the app projects them to the screen with swarm.anchor(name, fn)
