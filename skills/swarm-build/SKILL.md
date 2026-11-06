@@ -9,7 +9,7 @@ A crew of labelled agent cursors builds the page while the visitor watches. It's
 
 | File | What it is |
 |---|---|
-| `assets/swarm-build.js` | Engine (ES module, no dependencies, about 25 KB unminified) |
+| `assets/swarm-build.js` | Engine (ES module, no dependencies, about 30 KB unminified, 10 KB gzipped) |
 | `assets/swarm-build.css` | Styles. Every class is `sb-` prefixed and the theme hooks are CSS variables. |
 | `examples/index.html` | Working demo and reference integration |
 | `references/api.md` | Every attribute, option and method, plus the head snippet |

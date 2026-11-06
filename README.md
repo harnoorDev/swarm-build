@@ -4,7 +4,7 @@
 
 ![swarm-build demo: agent cursors building a page](docs/demo.gif)
 
-- **Zero dependencies.** One ES module (~25 KB) and one stylesheet.
+- **Zero dependencies.** One ES module (~30 KB, ~10 KB gzipped) and one stylesheet (~2 KB gzipped).
 - **Declarative.** You add `data-swarm` and `data-swarm-step` attributes. No timeline code.
 - **Built for real sites.** It plays once per session and fast-forwards on any key, click, tap or scroll. Reduced motion turns it off, the text stays in the DOM, and the agent layers are `aria-hidden`.
 - **Ships as a Claude skill.** `skills/swarm-build/SKILL.md` teaches Claude how to add it to any site, with a verification checklist.
