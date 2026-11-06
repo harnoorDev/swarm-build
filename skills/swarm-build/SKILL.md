@@ -9,10 +9,10 @@ A crew of labelled agent cursors builds the page while the visitor watches. It's
 
 | File | What it is |
 |---|---|
-| `assets/swarm-build.js` | Engine (ES module, no dependencies, about 38 KB unminified, 12 KB gzipped) |
+| `assets/swarm-build.js` | Engine (ES module, no dependencies, about 42 KB unminified, 14 KB gzipped) |
 | `assets/swarm-build.css` | Styles. Every class is `sb-` prefixed and the theme hooks are CSS variables. |
 | `examples/index.html` | Working demo and reference integration |
-| `examples/3d.html` | A 3D site: a WebGL scene (no libraries) that assembles itself as the renderer sweeps it in, with anchors |
+| `examples/3d.html` | A 3D scene with no text: a crew of trades surveys, raises, clads and lights a WebGL city (no libraries), using build sites and `data-swarm-sweep="none"` |
 | `references/api.md` | Every attribute, option and method, plus the head snippet |
 | `references/integration.md` | Existing intros, GSAP/SplitText, smooth scroll, Next.js/React, 3D sites (Three.js, R3F, Babylon, Spline, model-viewer), custom crews |
 
@@ -28,7 +28,7 @@ If the assets are missing, get them from https://github.com/harnoorDev/swarm-bui
    - `fetch`: short labels and data (location, status, kicker)
    - `count`: numbers
    - `reveal`: anything that should just fade in
-   - `scene`: a 3D viewport (`<canvas>`, the `<div>` a 3D library renders into, `<spline-viewer>`, `<model-viewer>`). Add `data-swarm-await` when it loads models, and `data-swarm-anchors` for up to three points the renderer should inspect. Wire the scene to `swarm:scene` and call `swarm.ready()` (`references/integration.md`, 3D sites).
+   - `scene`: a 3D viewport (`<canvas>`, the `<div>` a 3D library renders into, `<spline-viewer>`, `<model-viewer>`). Add `data-swarm-await` when it loads models, and `data-swarm-anchors` for up to three points the renderer should inspect. Wire the scene to `swarm:scene` and call `swarm.ready()` (`references/integration.md`, 3D sites). If the scene can animate its own construction, use `data-swarm-sweep="none"` with a longer `data-swarm-duration`, and register build sites (`swarm.anchor(name, fn, { at, by })`) so the crew works inside it.
    - Combine steps in order when one element needs two, for example `"frame stream"`.
 3. **Pick the attack.** Optional, at most one per page, and only when the site's subject fits (AI, security, trust). Choose a word whose rewrite flips the meaning: `without>with`, `never>always`, `safe>unsafe`. The red-team deletes or types the difference, the guardrail blocks it and rolls it back, and the trace reads "blocked prompt injection". Skip it where it would read as a gimmick.
 4. **Integrate** in four parts. `examples/index.html` shows all of them.
@@ -58,7 +58,7 @@ Run it in a real browser, for example Playwright. Do a fresh context for every p
 - [ ] **Reduced motion:** nothing is hidden, no `.sb-layer` exists, and the credit stays hidden.
 - [ ] **Second load in the same session:** no build. The normal page and its normal animations run.
 - [ ] **Light theme, if the site has one:** the cursors, selection boxes and trace are legible.
-- [ ] **3D scenes, if any:** the scene assembles in sync with the sweep (geometry, then materials, then lighting), ends fully built with no `clip-path` left on the viewport, and the renderer finds every anchor (the console warns about missing ones). With reduced motion the scene shows finished at once. Remove the `swarm.ready()` call once to check that the build waits at most `sceneTimeout` and then carries on.
+- [ ] **3D scenes, if any:** the scene assembles in sync with the sweep (geometry, then materials, then lighting), ends fully built with no `clip-path` left on the viewport, and the renderer finds every anchor (the console warns about missing ones). Build sites put each agent on something the scene is visibly doing at that moment, and no agent is left floating off its work. With reduced motion the scene shows finished at once. Remove the `swarm.ready()` call once to check that the build waits at most `sceneTimeout` and then carries on.
 - [ ] **Screenshot mid-build and at the end, and look at them.** Check the crosshair, I-beam and arrow glyphs are visible. A global `svg { max-width: 100% }` is neutralised by `.sb-g`, but a stricter reset can still hide them.
 
 ## Gotchas
@@ -68,7 +68,7 @@ Run it in a real browser, for example Playwright. Do a fresh context for every p
 - **Fixed and sticky elements** (a nav) can be built. Leave them outside any region and they join the first region's build.
 - **The `hidden` attribute** loses to any CSS `display:` rule. The library forces `[data-swarm-credit][hidden]` to stay hidden, but other `hidden` elements you add can still be overridden.
 - **Gradient text** (`background-clip: text`) works, because characters stay inside the gradient parent.
-- **3D scenes must start built.** Initialise the scene's build value at 1 and only follow `swarm:scene`, which always ends on one `ready` event at progress 1. A scene that starts at 0 and waits for the library stays empty when the effect is off.
+- **3D scenes must start built.** Initialise the scene's build value at 1 and only follow `swarm:scene`, which always ends on one `ready` event at progress 1. A scene that starts at 0 and waits for the library stays empty when the effect is off. The one exception is a `data-swarm-sweep="none"` scene, which is shown unclipped: start it at 0 only while `<html>` has `swarm-js`, and fall back to 1 if no event arrives.
 - **WebGL shader precision:** a uniform used in both shaders needs the same precision in each (`uniform mediump float uBuild;`), or the program fails to link and the viewport stays blank. Check the console after the first build.
 - **SEO and accessibility:** the text stays in the DOM, the agent layers are `aria-hidden`, and split spans are removed once a region finishes.
 - **Licensing:** this engine is MIT. Never copy code or SVGs from `califa/swarm-site`, which has no license. Credit the idea instead.

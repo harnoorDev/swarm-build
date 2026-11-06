@@ -183,6 +183,30 @@ new Application(canvas).load('https://prod.spline.design/…/scene.splinecode').
 viewer.addEventListener('load', () => swarm.ready(viewer));
 ```
 
+### A scene that builds itself, with the crew on site
+
+When the scene animates its own construction (a city going up, a product assembling, a level being laid out), drop the wipe and give the crew jobs inside it. `examples/3d.html` builds a whole city this way, with no text on the page:
+
+```html
+<canvas id="city" data-swarm-step="scene" data-swarm-sweep="none" data-swarm-duration="7" data-swarm-await></canvas>
+```
+
+```js
+const swarm = swarmBuild({ crew: { renderer: '#b49bff', surveyor: '#4ee9f5', mason: '#ffb547', electrician: '#ff8fd8' } });
+// shown unclipped, so start empty while a build is coming, finished otherwise
+let build = document.documentElement.classList.contains('swarm-js') ? 0 : 1;
+canvas.addEventListener('swarm:scene', (e) => { build = e.detail.progress; });
+
+// each site: who works there, and when (scene progress); fn follows the point as it moves or grows
+swarm
+  .anchor('plaza', () => toScreen(plaza), { at: 0, by: 'surveyor', say: 'staking out the plaza', label: false })
+  .anchor('tower', () => toScreen(towerRoofAt(build)), { at: 0.11, by: 'mason', hold: 1.6, say: 'topping out the tower' })
+  .anchor('lamps', () => toScreen(lamp), { at: 0.8, by: 'electrician', say: 'switching on the street lamps' });
+swarm.start();
+```
+
+Tie each site to something the scene is visibly doing at that progress, and point `fn` at where it is happening right now (the roof as it rises, the edge of the paving as it spreads), so the cursor is always on the work. If the camera moves during the build, agents stay with their last site until their next one. Without WebGL, or before the first frame, return `null`: the agent waits where it is.
+
 ### Things to know
 
 - **Orbit controls:** dragging the scene counts as a pointer press, so it fast-forwards the build. That's intended.

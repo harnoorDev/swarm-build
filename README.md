@@ -4,13 +4,13 @@
 
 ![swarm-build demo: agent cursors building a page](docs/demo.gif)
 
-- **Zero dependencies.** One ES module (~38 KB, ~12 KB gzipped) and one stylesheet (~2.5 KB gzipped).
+- **Zero dependencies.** One ES module (~42 KB, ~14 KB gzipped) and one stylesheet (~2.5 KB gzipped).
 - **Declarative.** You add `data-swarm` and `data-swarm-step` attributes. No timeline code.
-- **Works with 3D sites.** Three.js, React Three Fiber, Babylon, Spline, `<model-viewer>` or a raw WebGL canvas: the scene follows `swarm:scene` progress events (geometry, then materials, then lighting), can make the build wait for its models, and lets the renderer point at objects inside it as they move.
+- **Works with 3D sites.** Three.js, React Three Fiber, Babylon, Spline, `<model-viewer>` or a raw WebGL canvas: the scene follows `swarm:scene` progress events (geometry, then materials, then lighting), can make the build wait for its models, and lets the renderer point at objects inside it as they move. A scene that builds itself can send any agent to a build site inside it at the right moment: the 3D demo is a city that a crew of trades surveys, raises, clads and lights, with no text on the page.
 - **Built for real sites.** It plays once per session and fast-forwards on any key, click, tap or scroll. Reduced motion turns it off, the text stays in the DOM, and the agent layers are `aria-hidden`.
 - **Ships as a Claude skill.** `skills/swarm-build/SKILL.md` teaches Claude how to add it to any site, with a verification checklist.
 
-**Demo:** https://harnoordev.github.io/swarm-build/ · **3D demo:** https://harnoordev.github.io/swarm-build/skills/swarm-build/examples/3d.html · **In production:** https://iamharnoor.com
+**Demo:** https://harnoordev.github.io/swarm-build/ · **3D demo (a crew builds a city):** https://harnoordev.github.io/swarm-build/skills/swarm-build/examples/3d.html · **In production:** https://iamharnoor.com
 
 ## Use it
 
