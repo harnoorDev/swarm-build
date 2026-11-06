@@ -185,10 +185,10 @@ viewer.addEventListener('load', () => swarm.ready(viewer));
 
 ### A scene that builds itself, with the crew on site
 
-When the scene animates its own construction (a city going up, a product assembling, a level being laid out), drop the wipe and give the crew jobs inside it. `examples/3d.html` builds a whole city this way, with no text on the page:
+When the scene animates its own construction (a city going up, a product assembling, a level being laid out), drop the wipe and give the crew jobs inside it. `examples/3d.html` builds a whole Three.js world this way, just ahead of a steam train, with no text on the page:
 
 ```html
-<canvas id="city" data-swarm-step="scene" data-swarm-sweep="none" data-swarm-duration="7" data-swarm-await></canvas>
+<canvas id="world" data-swarm-step="scene" data-swarm-sweep="none" data-swarm-duration="20" data-swarm-await></canvas>
 ```
 
 ```js

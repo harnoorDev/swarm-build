@@ -166,7 +166,7 @@ export function swarmBuild(options = {}) {
     .filter(([, s]) => s.at != null && (s.on ? (typeof s.on === 'string' ? el.matches(s.on) : s.on === el) : el === firstScene()))
     .map(([name, s]) => ({ ...s, name, at: Math.min(1, Math.max(0, +s.at || 0)) }))
     .sort((p, q) => p.at - q.at)
-    .slice(0, 32);
+    .slice(0, 64);
 
   // ---------------------------------------------------------------- text helpers
   const remember = (el) => { if (!originals.has(el)) originals.set(el, el.innerHTML); };
@@ -449,7 +449,13 @@ export function swarmBuild(options = {}) {
         pin.style.top = q.y + 'px';
         pin.style.opacity = p >= 1 ? 0 : Math.min(1, (p * hold) / 0.15, ((1 - p) * hold) / 0.15);
       });
-      if (stay > 0.05) tl.tween(t + 0.35 + hold, stay, 'linear', () => { const q = at(); if (q) ag.set(q.x + 6, q.y + 6); });
+      // stays with the point; once it has passed out of view, slips off the nearest side until its next job
+      if (stay > 0.05) tl.tween(t + 0.35 + hold, stay, 'linear', () => {
+        const q = at();
+        if (q) { ag.set(q.x + 6, q.y + 6); return; }
+        const v = view(), tx = ag.x < (v.x0 + v.x1) / 2 ? v.x0 - 90 : v.x1 + 90;
+        ag.set(ag.x + (tx - ag.x) * 0.08, ag.y);
+      });
       return t + 0.35 + hold;
     }
     // 3D: the renderer frames the viewport, waits for the scene's assets if asked to, then sweeps the
@@ -460,7 +466,7 @@ export function swarmBuild(options = {}) {
       const b = rel(el), name = label(el), color = o.crew.renderer || DEFAULT_CREW.renderer;
       // data-swarm-sweep="none": no wipe, the scene shows its own build; data-swarm-duration: seconds
       const still = el.dataset.swarmSweep === 'none';
-      const D = Math.min(12, Math.max(0.5, parseFloat(el.dataset.swarmDuration) || 1.5));
+      const D = Math.min(30, Math.max(0.5, parseFloat(el.dataset.swarmDuration) || 1.5));
       let ts = t;
       if (a) { log('renderer', 'viewport ' + name, t); ts = frame(a, el, t, 0.4) + 0.06; }
       const ov = put('sb-scene' + (still ? ' sb-scene--still' : ''));
@@ -551,8 +557,8 @@ export function swarmBuild(options = {}) {
     if (isFirst) {
       const anchor = document.querySelector('[data-swarm-origin]') || list[0] || region;
       const b = rel(anchor), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-      const R = innerWidth <= 720 ? 36 : 50, W = v0.x1 - v0.x0, H = v0.y1 - v0.y0;
       const orbiters = crew.filter((a) => a.id !== 'red-team');
+      const R = (innerWidth <= 720 ? 36 : 50) * Math.max(1, Math.sqrt(orbiters.length / 7)), W = v0.x1 - v0.x0, H = v0.y1 - v0.y0;   // a bigger crew gets a wider ring
       const seed = put('sb-seed');
       Object.assign(seed.style, { left: cx + 'px', top: cy + 'px', opacity: 0 });
       tl.tween(0, 0.35, 'out', (p) => { seed.style.opacity = p; seed.style.transform = `scale(${p})`; });

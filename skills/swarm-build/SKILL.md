@@ -12,7 +12,7 @@ A crew of labelled agent cursors builds the page while the visitor watches. It's
 | `assets/swarm-build.js` | Engine (ES module, no dependencies, about 42 KB unminified, 14 KB gzipped) |
 | `assets/swarm-build.css` | Styles. Every class is `sb-` prefixed and the theme hooks are CSS variables. |
 | `examples/index.html` | Working demo and reference integration |
-| `examples/3d.html` | A 3D scene with no text: a crew of trades surveys, raises, clads and lights a WebGL city (no libraries), using build sites and `data-swarm-sweep="none"` |
+| `examples/3d.html` | A Three.js scene with no text: a crew of twelve builds a world just ahead of a steam train (fields, a harbour town, a mountain climb), using build sites, `data-swarm-sweep="none"` and `data-swarm-await` |
 | `references/api.md` | Every attribute, option and method, plus the head snippet |
 | `references/integration.md` | Existing intros, GSAP/SplitText, smooth scroll, Next.js/React, 3D sites (Three.js, R3F, Babylon, Spline, model-viewer), custom crews |
 

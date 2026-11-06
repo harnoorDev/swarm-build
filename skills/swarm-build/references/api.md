@@ -36,7 +36,7 @@ If you change the `key` option, change `k` to match.
 | `data-swarm-await` | a `scene` element | Hold the sweep until the app calls `swarm.ready(el)` (its models and textures are loaded), for at most `sceneTimeout` seconds. Any key, click or tap ends the wait. |
 | `data-swarm-anchors="a, b"` | a `scene` element | Up to three points inside the scene the renderer inspects after the sweep. Register each with `swarm.anchor(name, fn)`. |
 | `data-swarm-sweep="none"` | a `scene` element | No wipe, grid or scan line: the scene is shown whole and builds itself from the `swarm:scene` progress, which runs linearly. The progress readout stays. Use it when the scene animates its own construction. |
-| `data-swarm-duration="7"` | a `scene` element | How long the build takes, in seconds (0.5 to 12, default 1.5). Give a scene that builds itself room to do it. |
+| `data-swarm-duration="7"` | a `scene` element | How long the build takes, in seconds (0.5 to 30, default 1.5). Give a scene that builds itself room to do it. |
 
 ### Steps
 
@@ -115,7 +115,7 @@ An anchor registered with `at` is a build site: while the scene is at that progr
 | `label` | the name | Pin text; `false` for a bare ring. |
 | `on` | the first scene on the page | The scene element, or a selector, the site belongs to. |
 
-`fn` is called every frame, so the agent follows a point that moves or grows (a roof as the building rises). Once its work is done, the agent stays with the point until its next site or the end of the build, so a moving camera never leaves it hanging in mid-air. Register sites before the region builds; up to 32 per scene.
+`fn` is called every frame, so the agent follows a point that moves or grows (a roof as the building rises). Once its work is done, the agent stays with the point until its next site or the end of the build, so a moving camera never leaves it hanging in mid-air; if the point passes out of view, the agent slips off the nearest edge until its next job. Register sites before the region builds; up to 64 per scene.
 
 The app can also dispatch `swarm:ready` on the element itself instead of calling `swarm.ready(el)`.
 

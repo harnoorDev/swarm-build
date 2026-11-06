@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#071226">
-<title>swarm-build · a crew builds a city</title>
-<meta name="description" content="swarm-build on a 3D scene: a crew of agents surveys the streets, raises the blocks, clads the towers and switches on the lights of a WebGL city while you watch.">
+<meta name="theme-color" content="#cfe7f6">
+<title>swarm-build · a crew builds a world</title>
+<meta name="description" content="swarm-build on a Three.js scene: a crew of agents builds a world just ahead of a little steam train, from sunflower fields and windmills to a harbour town and a snowy summit.">
 <!-- 1 · The head snippet (once: 'always' for this demo; see references/api.md). -->
 <script>
 (function () {
@@ -14,704 +14,855 @@
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     if (localStorage.getItem('swarm-build-off') === '1') return;
     d.classList.add('swarm-js');
-    setTimeout(function () { if (!window.__swarmBuild) d.classList.remove('swarm-js'); }, 6000);
+    setTimeout(function () { if (!window.__swarmBuild) d.classList.remove('swarm-js'); }, 8000);
   } catch (e) {}
 })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/swarm-build.css">
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js" } }</script>
 <style>
-  :root { color-scheme: dark; --sb-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+  :root { color-scheme: light; --sb-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
   html, body { margin: 0; height: 100%; overflow: hidden; }
-  body { background: radial-gradient(120% 90% at 50% 45%, #0a1a31 0%, #050c19 100%) #071226; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+  body { background: linear-gradient(#9fd0f2 0%, #d7ecf8 55%, #eef6fa 100%) #d7ecf8; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   main { position: fixed; inset: 0; }
-  #city { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #world, #marks { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #marks { pointer-events: none; }
   .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  /* the only control: build it again, shown once the crew has left */
+  /* the scene builds itself, so the engine's progress readout stays out of the picture */
+  main .sb-scene__hud { display: none; }
+  /* agents wearing ink get light text on their tags */
+  .sb-ag[style*="#16181d"] .sb-ag__tag { color: #fff; }
   .again {
     position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom));
     width: 46px; height: 46px; display: grid; place-items: center; padding: 0; border-radius: 50%;
-    border: 1px solid rgba(255, 236, 214, .28); background: rgba(12, 12, 26, .42); color: #ffe9d2; cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, .7); background: rgba(255, 255, 255, .55); color: #16181d; cursor: pointer;
+    box-shadow: 0 6px 20px -8px rgba(20, 30, 50, .45);
     -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
     opacity: 0; transform: translateY(6px); pointer-events: none; transition: opacity .6s ease, transform .6s ease, background-color .2s;
   }
-  main.swarm-done .again { opacity: 1; transform: none; pointer-events: auto; transition-delay: .4s, .4s, 0s; }
-  .again:hover { background: rgba(40, 32, 60, .6); }
-  .again:focus-visible { outline: 2px solid #b49bff; outline-offset: 3px; }
+  main.swarm-done .again { opacity: 1; transform: none; pointer-events: auto; transition-delay: 2.5s, 2.5s, 0s; }
+  .again:hover { background: rgba(255, 255, 255, .8); }
+  .again:focus-visible { outline: 2px solid #ff5b3a; outline-offset: 3px; }
   .again svg { width: 20px; height: 20px; }
 </style>
 </head>
 <body>
-<!-- 2 · Markup. One full-screen canvas with data-swarm-step="scene". data-swarm-sweep="none" lets the
-     city build itself (no wipe), data-swarm-duration gives it seven seconds, and the build sites
-     registered with swarm.anchor(…, { at, by }) send each trade to where the city is going up. -->
+<!-- 2 · Markup. A full-screen Three.js canvas with data-swarm-step="scene": no wipe (data-swarm-sweep="none"),
+     twenty seconds (data-swarm-duration), and the build waits for Three.js to load (data-swarm-await).
+     Build sites registered with swarm.anchor(…, { at, by }) send each agent to what is being built. -->
 <main data-swarm>
-  <h1 class="sr-only">A crew of agents builds a city</h1>
-  <canvas id="city" data-swarm-step="scene" data-swarm-label="city" data-swarm-sweep="none" data-swarm-duration="7" data-swarm-await
-          role="img" aria-label="A city at dusk seen from above: a grid of streets, glass towers around a central plaza with an obelisk, two parks, lit windows and traffic."></canvas>
-  <button class="again" type="button" aria-label="Build the city again">
+  <h1 class="sr-only">A crew of agents builds a world ahead of a steam train</h1>
+  <canvas id="world" data-swarm-step="scene" data-swarm-label="world" data-swarm-sweep="none" data-swarm-duration="20" data-swarm-await
+          role="img" aria-label="A little steam train crosses a world built in front of it: sunflower and lavender fields with windmills, a pastel harbour town with a lighthouse and sailboats, then pine forest up to a snowy summit station at golden hour."></canvas>
+  <canvas id="marks" aria-hidden="true"></canvas>
+  <button class="again" type="button" aria-label="Build the world again">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4.5h-4.5"/></svg>
   </button>
 </main>
 
-<!-- 3 · The engine, a crew of trades, and a WebGL city that follows swarm:scene progress. -->
+<!-- 3 · The engine, a crew of twelve, and a Three.js world that follows swarm:scene progress. -->
 <script type="module">
   import { swarmBuild } from '../assets/swarm-build.js';
 
+  const CORAL = '#ff5b3a', CREAM = '#fff6e8', INK = '#16181d';
   const crew = {
-    renderer: '#b49bff', surveyor: '#4ee9f5', mason: '#ffb547', steelworker: '#e7ff52',
-    glazier: '#6aa8ff', gardener: '#8dffb9', electrician: '#ff8fd8',
+    renderer: '#b49bff', conductor: CORAL, tracklayer: INK, terraformer: CREAM, gardener: CORAL, painter: INK,
+    carpenter: CREAM, rigger: CORAL, mason: INK, shipwright: CREAM, cloudsmith: CORAL, lamplighter: INK,
   };
-  const swarm = swarmBuild({ once: 'always', crew });
-  const canvas = document.getElementById('city');
+  const DUR = 20;   // seconds, as in data-swarm-duration
+  const swarm = swarmBuild({ once: 'always', crew, trace: false, sceneTimeout: 8 });
+  const canvas = document.getElementById('world'), marks = document.getElementById('marks');
   const root = document.documentElement;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   document.querySelector('.again').addEventListener('click', () => swarm.replay());
 
-  // Build progress 0 → 1 comes from the crew. With no build (reduced motion, effect off) the city is finished.
-  let build = root.classList.contains('swarm-js') ? 0 : 1, heard = false, dirty = true;
-  canvas.addEventListener('swarm:scene', (e) => { heard = true; build = e.detail.progress; dirty = true; });
+  // Build progress 0 → 1 comes from the crew; with no build (reduced motion, effect off) the world is finished.
+  let build = root.classList.contains('swarm-js') ? 0 : 1, heard = false, clock = 0, readyAt = null;
+  canvas.addEventListener('swarm:scene', (e) => {
+    heard = true; build = e.detail.progress;
+    if (build < 1) readyAt = null; else if (readyAt === null) readyAt = clock;
+  });
 
-  // ------------------------------------------------------------------ helpers
-  const cl = (x) => Math.min(1, Math.max(0, x));
-  const sm = (x) => x * x * (3 - 2 * x);
-  const mix = (a, b, k) => (typeof a === 'number' ? a + (b - a) * k : a.map((v, i) => v + (b[i] - v) * k));
-  const span = (p, a, b) => sm(cl((p - a) / (b - a)));
-  let seed = 20261104;
+  // ------------------------------------------------------------------ small maths
+  const cl = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  const sm = (e0, e1, x) => { const t = cl((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const mixv = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+  let seed = 20261106;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const rr = (a, b) => a + (b - a) * rnd();
+  const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+  const h2 = (x, z) => { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); };
+  function noise(x, z) {
+    const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi, u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+    return lerp(lerp(h2(xi, zi), h2(xi + 1, zi), u), lerp(h2(xi, zi + 1), h2(xi + 1, zi + 1), u), v);
+  }
+  const fbm = (x, z) => noise(x, z) * 0.5 + noise(x * 2.03 + 5, z * 2.03) * 0.25 + noise(x * 4.1, z * 4.1 + 3) * 0.125 + noise(x * 8.3 + 1, z * 8.3) * 0.0625;
 
-  // the three waves of the build, shared by the shaders and the build sites
-  const geoOf = (p) => cl(p / 0.45), matOf = (p) => cl((p - 0.45) / 0.35), litOf = (p) => cl((p - 0.8) / 0.2);
-  // the survey and the paving spread out from the plaza; once past the city the paving races off to the horizon
-  const surveyR = (p) => cl(p / 0.2) * 34;
-  const paveR = (p) => { const m = matOf(p) / 0.55; return m <= 1 ? m * 31 : 31 + (m - 1) * 900; };
-  const lampAt = (x, z) => 0.55 * cl(Math.hypot(x, z) / 26);
+  // ------------------------------------------------------------------ the line: a Catmull-Rom curve, sampled
+  const CP = [
+    [-24, 1.2, 198], [-12, 1.3, 168], [2, 1.4, 142], [-9, 1.6, 116], [6, 1.6, 92], [18, 1.8, 68],          // fields and windmills
+    [25, 2.0, 46], [27, 2.2, 22], [22, 2.6, 0],                                             // along the harbour
+    [8, 5, -18], [-14, 9.5, -32], [-20, 14.5, -52], [-4, 20.5, -66], [16, 26.5, -80],       // the climb
+    [12, 32.5, -100], [-6, 37.5, -112], [-14, 41.5, -128], [-6, 43.5, -144],                // to the summit station
+  ];
+  const PS = [];
+  for (let i = 0; i < CP.length - 1; i++) {
+    const p0 = CP[Math.max(0, i - 1)], p1 = CP[i], p2 = CP[i + 1], p3 = CP[Math.min(CP.length - 1, i + 2)];
+    for (let k = 0; k < 60; k++) {
+      const t = k / 60, t2 = t * t, t3 = t2 * t;
+      PS.push(p1.map((_, j) => 0.5 * (2 * p1[j] + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2 + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3)));
+    }
+  }
+  PS.push(CP[CP.length - 1]);
+  const SL = [0];
+  for (let i = 1; i < PS.length; i++) SL.push(SL[i - 1] + Math.hypot(PS[i][0] - PS[i - 1][0], PS[i][1] - PS[i - 1][1], PS[i][2] - PS[i - 1][2]));
+  const LEN = SL[SL.length - 1];
+  function pathAt(s) {
+    s = cl(s, 0, LEN);
+    let lo = 0, hi = SL.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (SL[m] <= s) lo = m; else hi = m; }
+    const t = (s - SL[lo]) / (SL[hi] - SL[lo] || 1), a = PS[lo], b = PS[hi];
+    const i0 = Math.max(0, lo - 2), i1 = Math.min(PS.length - 1, hi + 2);
+    const tx = PS[i1][0] - PS[i0][0], tz = PS[i1][2] - PS[i0][2], tl = Math.hypot(tx, tz) || 1;
+    return { p: [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)], t: [tx / tl, 0, tz / tl], r: [-tz / tl, 0, tx / tl] };
+  }
+  // the closest point on the line (distance, path length, height), plus the line's height blended over every
+  // nearby stretch: narrowly for the track bed, broadly for the valley floor, so switchbacks never leave a cliff
+  function nearest(x, z) {
+    let bd = 1e9, bi = 0, wn = 0, yn = 0, wb = 0, yb = 0;
+    for (let i = 0; i < PS.length; i += 2) {
+      const dx = x - PS[i][0], dz = z - PS[i][2], d2 = dx * dx + dz * dz;
+      if (d2 < bd) { bd = d2; bi = i; }
+      if (d2 < 3600) { const k = (1 - d2 / 3600) ** 2; wb += k; yb += k * PS[i][1]; if (d2 < 196) { const q = (1 - d2 / 196) ** 3; wn += q; yn += q * PS[i][1]; } }
+    }
+    const y = PS[bi][1];
+    return { d: Math.sqrt(bd), s: SL[bi], y, yn: wn ? yn / wn : y, yb: wb ? yb / wb : y };
+  }
 
-  // ------------------------------------------------------------------ the plan of the city
-  const N = 9, MID = 4, BLOCK = 3.2, ROAD = 1.1, PITCH = BLOCK + ROAD, WALK = 0.24, S2 = BLOCK / 2 - WALK;
-  const TOWER = [4, 3], PLAZA = [4, 4], PARKS = [[6, 5], [1, 2]];
-  const at = (i) => (i - MID) * PITCH;
-  const buildings = [], trees = [], kit = [];
-  const slotFor = (x, z) => Math.hypot(x, z) / 24.4;
+  // the train's timetable: eases out of the first field, stops at the summit station when the build ends
+  const S0 = 34, S1 = LEN - 6, SCH = new Float64Array(1001);
+  for (let i = 1; i <= 1000; i++) { const p = (i - 0.5) / 1000; SCH[i] = SCH[i - 1] + (0.03 + 0.97 * sm(0, 0.1, p)) * (1 - sm(0.84, 1.0, p)); }
+  const trainS = (p) => S0 + (S1 - S0) * (SCH[Math.round(cl(p) * 1000)] / SCH[1000]);
+  function pOfS(s) {
+    const f = cl((s - S0) / (S1 - S0)) * SCH[1000];
+    let lo = 0, hi = 1000;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (SCH[m] <= f) lo = m; else hi = m; }
+    return lo / 1000;
+  }
+  // when something at path length s starts being built: a burst around the start, then a front running ahead of the train
+  const W = 0.032;   // build window, in progress (≈ 0.65 s)
+  const buildAt = (s, lead) => Math.min(0.955, Math.max(0.006 + 0.06 * cl(s / (S0 + lead + 10)), pOfS(s - lead)));
 
-  function addBuilding(cx, cz, w, d, H, type, opts = {}) {
-    const dW = slotFor(cx, cz);
-    const b = {
-      cx, cz, w, d, H, type, seed: rnd(),
-      slot: opts.slot ?? 0.05 + 0.64 * dW + 0.06 * rnd(), riseD: opts.riseD ?? 0.16 + 0.022 * H,
-      slotM: opts.slotM ?? 0.03 + 0.5 * dW + 0.06 * rnd(), tiers: [],
+  // ------------------------------------------------------------------ the land
+  const coastX = (z) => 37 + 6 * Math.sin(z * 0.06) + Math.max(0, z - 82) * 0.95 + Math.max(0, -z - 26) * 0.75;
+  const ISLE = [coastX(-8) + 15, -8];
+  const PEAKS = [[-72, -150, 44, 26], [42, -176, 52, 30], [-104, -82, 30, 26], [72, -122, 34, 26], [0, -228, 62, 36], [-122, -182, 52, 34], [102, -192, 40, 30], [-40, -206, 46, 26], [-62, -20, 14, 26]];
+  // the land: rolling fields, a hill above the harbour, and a valley that climbs with the line between snowy peaks
+  function land(x, z, nr) {
+    const n1 = fbm(x * 0.018 + 3.1, z * 0.018 - 1.7), n2 = noise(x * 0.07, z * 0.07);
+    const wM = sm(38, 72, z), wA = sm(-10, -46, z), wT = Math.max(0, 1 - wM - wA);
+    const cx = coastX(z);
+    let h = (1.4 + (n1 - 0.45) * 7 + (n2 - 0.5) * 1.1) * wM + (1.4 + Math.max(0, cx - x - 9) * 0.2 + (n1 - 0.45) * 4) * wT;
+    if (wA > 0) {
+      const ridge = 1 - Math.abs(2 * noise(x * 0.03 + 7, z * 0.03 + 2) - 1), rise = Math.max(0, nr.d - 7);
+      h += wA * (nr.yb - 1.0 + Math.pow(rise, 1.15) * (0.1 + 0.14 * n1) + ridge * 3 * sm(14, 40, nr.d) + (n2 - 0.5) * 1.2);
+    }
+    for (const [px, pz, ph, pr] of PEAKS) h += ph * Math.exp(-((x - px) ** 2 + (z - pz) ** 2) / (pr * pr)) * (0.85 + 0.3 * n2);
+    h += Math.max(0, -x - 46) * 0.32 * (0.6 + n1);
+    const dc = cx - x;
+    if (dc < 12) h = Math.min(h, (dc - 2) * 0.34 + (n2 - 0.5) * 0.5);
+    const di = Math.hypot(x - ISLE[0], z - ISLE[1]);
+    if (di < 11) h = Math.max(h, 4.6 - di * di * 0.055 + (n2 - 0.5) * 0.8);
+    return Math.max(h, -5.5);
+  }
+  function height(x, z, nr = nearest(x, z)) {   // the land, with a bed cut for the line
+    let h = land(x, z, nr);
+    h = lerp(h, nr.yn - 0.24, sm(13, 3.2, nr.d));
+    return nr.d < 2.4 ? lerp(nr.yn, nr.y, sm(2.4, 0, nr.d)) - 0.2 : h;
+  }
+
+  // fields beside the line in the first stretch: [path length, side, offset, length, width, crop]
+  const FIELDS = [[56, -1, 17, 30, 20, 'sun'], [78, 1, 16, 26, 18, 'lav'], [98, -1, 17, 28, 20, 'wheat'], [120, 1, 16, 30, 18, 'sun'],
+                  [138, -1, 16, 22, 16, 'lav'], [68, 1, 40, 26, 22, 'green'], [108, -1, 42, 24, 22, 'wheat'], [146, 1, 36, 22, 18, 'green']]
+    .map(([s, side, off, len, wid, crop]) => { const a = pathAt(s); return { c: [a.p[0] + a.r[0] * side * off, a.p[2] + a.r[2] * side * off], u: [a.t[0], a.t[2]], len, wid, crop, s }; });
+  const inField = (x, z) => {
+    for (const f of FIELDS) {
+      const dx = x - f.c[0], dz = z - f.c[1], u = dx * f.u[0] + dz * f.u[1], v = -dx * f.u[1] + dz * f.u[0];
+      if (Math.abs(u) < f.len / 2 && Math.abs(v) < f.wid / 2) return { f, u, v };
+    }
+    return null;
+  };
+
+  // ------------------------------------------------------------------ what gets built, where, and when
+  const things = {};   // kind → list of instances
+  const add = (kind, it) => (things[kind] = things[kind] || []).push(it);
+  const clearOf = []; // footprints to keep things apart: [x, z, r]
+  const free = (x, z, r) => clearOf.every(([a, b, c]) => (x - a) ** 2 + (z - b) ** 2 > (r + c) ** 2);
+
+  // the track: sleepers and rails, laid just ahead of the train
+  for (let s = 0.4; s < LEN - 0.3; s += 0.9) {
+    const a = pathAt(s), b = buildAt(s, 24);
+    add('sleeper', { x: a.p[0], y: a.p[1] - 0.16, z: a.p[2], ry: Math.atan2(a.t[0], a.t[2]), s, b });
+    for (const side of [-0.62, 0.62]) add('rail', { x: a.p[0] + a.r[0] * side, y: a.p[1], z: a.p[2] + a.r[2] * side, ry: Math.atan2(a.t[0], a.t[2]), sz: 0.95, s, b: b + 0.004 });
+  }
+  for (let s = 0; s < LEN; s += 3) { const a = pathAt(s); clearOf.push([a.p[0], a.p[2], 2.6]); }
+
+  // the fields: sunflowers and lavender in rows, hay bales on the wheat
+  for (const f of FIELDS) {
+    const lead = 52;
+    if (f.crop === 'sun' || f.crop === 'lav') {
+      const du = f.crop === 'sun' ? 0.95 : 1.05, dv = f.crop === 'sun' ? 1.1 : 1.25;
+      for (let v = -f.wid / 2 + 0.8; v < f.wid / 2 - 0.5; v += dv) for (let u = -f.len / 2 + 0.7; u < f.len / 2 - 0.5; u += du) {
+        const x = f.c[0] + f.u[0] * u - f.u[1] * v + rr(-0.15, 0.15), z = f.c[1] + f.u[1] * u + f.u[0] * v + rr(-0.15, 0.15);
+        const nr = nearest(x, z);
+        if (nr.d < 7) continue;
+        add(f.crop === 'sun' ? 'sunflower' : 'lavender', { x, y: height(x, z, nr), z, ry: f.crop === 'sun' ? rr(-0.45, 0.45) : rr(0, 6.28), sx: f.crop === 'sun' ? rr(0.7, 0.9) : rr(0.8, 1.1), s: nr.s, field: FIELDS.indexOf(f), b: buildAt(nr.s + (u + f.len / 2) * 0.35, lead) });
+      }
+    } else if (f.crop === 'wheat') {
+      for (let k = 0; k < 7; k++) {
+        const u = rr(-f.len / 2 + 3, f.len / 2 - 3), v = rr(-f.wid / 2 + 3, f.wid / 2 - 3);
+        const x = f.c[0] + f.u[0] * u - f.u[1] * v, z = f.c[1] + f.u[1] * u + f.u[0] * v, nr = nearest(x, z);
+        add('hay', { x, y: height(x, z, nr), z, ry: rr(0, 6.28), s: nr.s, field: FIELDS.indexOf(f), b: buildAt(nr.s, lead) });
+      }
+    }
+    clearOf.push([f.c[0], f.c[1], Math.min(f.len, f.wid) / 2]);
+  }
+  // windmills on the hills, and a farm
+  for (const [s, side, off] of [[64, -1, 42], [92, 1, 36], [130, -1, 44], [152, 1, 46]]) {
+    const a = pathAt(s), x = a.p[0] + a.r[0] * side * off, z = a.p[2] + a.r[2] * side * off, nr = nearest(x, z);
+    add('windmill', { x, y: height(x, z, nr) - 0.2, z, ry: 0.6, s: nr.s, b: buildAt(nr.s, 70) });
+    clearOf.push([x, z, 4]);
+  }
+  {
+    const a = pathAt(86), x = a.p[0] - a.r[0] * 30, z = a.p[2] - a.r[2] * 30, nr = nearest(x, z), ry = Math.atan2(a.t[0], a.t[2]);
+    add('barn', { x, y: height(x, z, nr) - 0.1, z, ry, s: nr.s, b: buildAt(nr.s, 60) });
+    add('silo', { x: x + a.t[0] * 5.4, y: height(x + a.t[0] * 5.4, z + a.t[2] * 5.4) - 0.1, z: z + a.t[2] * 5.4, ry, s: nr.s, b: buildAt(nr.s, 60) + 0.01 });
+    clearOf.push([x, z, 7]);
+  }
+  // fences along the line through the fields
+  for (let s = 26; s < 150; s += 2.4) for (const side of [-1, 1]) {
+    const a = pathAt(s), x = a.p[0] + a.r[0] * side * 4.2, z = a.p[2] + a.r[2] * side * 4.2;
+    add('fence', { x, y: height(x, z), z, ry: Math.atan2(a.t[0], a.t[2]), s, b: buildAt(s, 34) + 0.002 });
+  }
+  // the harbour town: pastel houses up the hill, a church, a pier, boats and a lighthouse on the islet
+  const WALLS = ['#f7d9c4', '#f6e7a8', '#c3e4d8', '#f5b9a8', '#cdd9f1', '#fff1df', '#e9d3ef', '#d6ecb5'];
+  const ROOFS = ['#c8553d', '#c8553d', '#b4472f', '#5b6b7a', '#d4693f', '#8b5a44'];
+  {
+    let tries = 0, n = 0;
+    while (n < 62 && tries++ < 3000) {
+      const s = rr(148, 234), a = pathAt(s), side = rnd() < 0.82 ? -1 : 1, off = side < 0 ? rr(8.5, 36) : rr(5, 9);
+      const x = a.p[0] + a.r[0] * side * off + rr(-2, 2), z = a.p[2] + a.r[2] * side * off + rr(-2, 2), nr = nearest(x, z);
+      const w = rr(2.4, 3.8), d = rr(2.3, 3.2), hh = rr(2.2, 4.4), y = height(x, z, nr);
+      if (nr.d < 4.6 || y < 0.9 || !free(x, z, Math.max(w, d) * 0.62) || coastX(z) - x < 4) continue;
+      const ry = Math.atan2(a.r[0], a.r[2]) + (side < 0 ? 0 : Math.PI) + rr(-0.15, 0.15);
+      const b = buildAt(nr.s + Math.max(0, nr.d - 8) * 0.3, 58);
+      add('house', { x, y: y - 0.25, z, ry, sx: w, sy: hh, sz: d, s: nr.s, b, color: pick(WALLS) });
+      add('roof', { x, y: y - 0.25 + hh, z, ry, sx: w, sy: rr(2.0, 3.0), sz: d, s: nr.s, b: b + 0.012, color: pick(ROOFS) });
+      clearOf.push([x, z, Math.max(w, d) * 0.62]);
+      n++;
+    }
+    const a = pathAt(192), x = a.p[0] - a.r[0] * 24, z = a.p[2] - a.r[2] * 24, nr = nearest(x, z);
+    if (free(x, z, 3)) { add('church', { x, y: height(x, z, nr) - 0.3, z, ry: Math.atan2(a.r[0], a.r[2]), s: nr.s, b: buildAt(nr.s, 64) }); clearOf.push([x, z, 5]); }
+    const pz = 30, px0 = coastX(pz) - 3;
+    add('pier', { x: px0, y: 0.35, z: pz, ry: Math.PI / 2, s: nearest(px0, pz).s, b: buildAt(nearest(px0, pz).s, 60) });
+    for (let k = 0; k < 7; k++) {
+      const z = rr(-6, 62), x = coastX(z) + rr(10, 34), nr = nearest(x, z);
+      add('boat', { x, y: 0, z, ry: rr(0, 6.28), s: nr.s, b: buildAt(nr.s, 66), seed: rnd() * 10, color: pick(['#ffffff', '#fff2d6', '#ffd9c9']) });
+    }
+    const nrI = nearest(ISLE[0], ISLE[1]);
+    add('lighthouse', { x: ISLE[0], y: land(ISLE[0], ISLE[1], nrI) - 0.3, z: ISLE[1], ry: 0, s: nrI.s, b: buildAt(nrI.s, 80) });
+    for (let s = 150; s < 234; s += 9) {   // lamps along the harbour side of the line
+      const a = pathAt(s), x = a.p[0] + a.r[0] * 3.6, z = a.p[2] + a.r[2] * 3.6;
+      add('lamp', { x, y: height(x, z), z, ry: 0, s, b: buildAt(s, 30) + 0.006 });
+    }
+  }
+  // round trees: hedgerows in the fields, gardens in the town
+  {
+    let tries = 0, n = 0;
+    while (n < 150 && tries++ < 5000) {
+      const s = rr(0, 238), a = pathAt(s), side = rnd() < 0.5 ? -1 : 1, off = rr(5, 60);
+      const x = a.p[0] + a.r[0] * side * off + rr(-3, 3), z = a.p[2] + a.r[2] * side * off + rr(-3, 3), nr = nearest(x, z);
+      const y = height(x, z, nr);
+      if (nr.d < 4.5 || y < 1.0 || inField(x, z) || !free(x, z, 1.4) || coastX(z) - x < 5) continue;
+      add('tree', { x, y: y - 0.1, z, ry: rr(0, 6.28), sx: rr(0.8, 1.3), s: nr.s, b: buildAt(nr.s + Math.max(0, nr.d - 10) * 0.3, 56) });
+      clearOf.push([x, z, 1.4]);
+      n++;
+    }
+  }
+  // the climb: pine forest, snow-tipped higher up, rocks, and the station at the top
+  {
+    let tries = 0, n = 0;
+    while (n < 400 && tries++ < 14000) {
+      const s = rr(230, LEN), a = pathAt(s), side = rnd() < 0.5 ? -1 : 1, off = rr(4, 70);
+      const x = a.p[0] + a.r[0] * side * off + rr(-4, 4), z = a.p[2] + a.r[2] * side * off + rr(-4, 4), nr = nearest(x, z);
+      if (nr.d < 5.5 || fbm(x * 0.05, z * 0.05) < 0.4) continue;
+      const y = height(x, z, nr), e = 1.2, slope = Math.abs(height(x + e, z) - height(x - e, z)) + Math.abs(height(x, z + e) - height(x, z - e));
+      if (y < 2 || y > 58 || slope > 3.6 || !free(x, z, 0.9)) continue;
+      add(y > 44 ? 'pineSnow' : 'pine', { x, y: y - 0.15, z, ry: rr(0, 6.28), sx: rr(0.75, 1.35), s: nr.s, b: buildAt(nr.s + Math.max(0, nr.d - 10) * 0.25, 56) });
+      clearOf.push([x, z, 0.9]);
+      n++;
+    }
+    tries = 0; n = 0;
+    while (n < 80 && tries++ < 4000) {
+      const s = rr(184, LEN), a = pathAt(s), side = rnd() < 0.5 ? -1 : 1, off = rr(4, 50);
+      const x = a.p[0] + a.r[0] * side * off, z = a.p[2] + a.r[2] * side * off, nr = nearest(x, z);
+      if (nr.d < 3.6 || !free(x, z, 1)) continue;
+      add('rock', { x, y: height(x, z, nr) - 0.3, z, ry: rr(0, 6.28), sx: rr(0.6, 1.8), sy: rr(0.5, 1.2), sz: rr(0.6, 1.6), s: nr.s, b: buildAt(nr.s, 50) });
+      n++;
+    }
+    const a = pathAt(LEN - 7), x = a.p[0] + a.r[0] * 3.3, z = a.p[2] + a.r[2] * 3.3;
+    add('station', { x, y: a.p[1] - 0.3, z, ry: Math.atan2(a.t[0], a.t[2]), s: LEN - 7, b: buildAt(LEN - 7, 46) });
+    for (const k of [-1, 1]) add('lamp', { x: x + a.t[0] * k * 4.6 + a.r[0] * 0.9, y: a.p[1] - 0.2, z: z + a.t[2] * k * 4.6 + a.r[2] * 0.9, ry: 0, s: LEN - 7, b: buildAt(LEN - 7, 46) + 0.01 });
+  }
+  // clouds over the line, built by the cloudsmith as the journey goes
+  const lastStop = pathAt(LEN - 7).p;
+  for (let k = 0; k < 15; k++) {
+    const s = LEN * (k + 0.4) / 15, a = pathAt(s), side = k % 2 ? 1 : -1, off = rr(18, 60);
+    const x = a.p[0] + a.r[0] * side * off, y = Math.max(48, a.p[1] + 34) + rr(-6, 10), z = a.p[2] + a.r[2] * side * off;
+    if (Math.hypot(x - lastStop[0], z - lastStop[2]) < 60) continue;   // keep the summit view clear
+    add('cloud', { x, y, z, ry: rr(0, 6.28), sx: rr(0.9, 1.6), s, b: buildAt(s, 90) });
+  }
+
+  // clusters for the overlay boxes, and the build sites the crew works on
+  const BOUNDS = {   // kind → [label, half width, height, half depth] in instance units
+    sleeper: ['Track', 1, 0.3, 0.5], sunflower: ['Sunflower', 0.3, 1.4, 0.3], lavender: ['Lavender', 0.45, 0.9, 0.45], hay: ['Hay bale', 0.7, 1.2, 0.7],
+    windmill: ['Windmill', 3.6, 11, 3.6], barn: ['Barn', 3.4, 5.6, 2.6], silo: ['Silo', 1.3, 7.6, 1.3], fence: ['Fence', 1.2, 1, 0.2],
+    house: ['House', 0.55, 1.5, 0.55], church: ['Church', 4, 13, 5], pier: ['Pier', 1.4, 1, 8], boat: ['Sailboat', 1, 5.2, 1.8],
+    lighthouse: ['Lighthouse', 1.6, 11.5, 1.6], lamp: ['Lamp', 0.3, 2.6, 0.3], tree: ['Tree', 1.6, 3.8, 1.6],
+    pine: ['Pine', 1.3, 4.6, 1.3], pineSnow: ['Pine', 1.3, 4.6, 1.3], rock: ['Rock', 1, 1.2, 1], station: ['Station', 5, 4.6, 2.4], cloud: ['Cloud', 7, 5, 4],
+  };
+  // one box per field, per map cell or per stretch of line, so the boxes sit on what is being built
+  const clusters = [], byKey = new Map();
+  const keyOf = (kind, it, i) => {
+    if (kind === 'sleeper') return 's' + Math.floor(it.s / 26);
+    if (kind === 'fence' || kind === 'lamp') return 's' + Math.floor(it.s / 34);
+    if (it.field !== undefined) return 'f' + it.field;
+    if (kind === 'boat') return 'bay';
+    const G = { house: 16, tree: 22, pine: 20, pineSnow: 20, rock: 26 }[kind];
+    return G ? Math.floor(it.x / G) + ',' + Math.floor(it.z / G) : 'i' + i;
+  };
+  for (const [kind, list] of Object.entries(things)) {
+    const bd = BOUNDS[kind];
+    if (!bd) continue;
+    list.forEach((it, i) => {
+      const key = bd[0] + '|' + keyOf(kind, it, i);
+      let c = byKey.get(key);
+      if (!c) { c = { label: bd[0], n: 0, min: [1e9, 1e9, 1e9], max: [-1e9, -1e9, -1e9], b0: 1, b1: 0 }; byKey.set(key, c); clusters.push(c); }
+      const sx = it.sx || 1, sy = it.sy || sx, sz = it.sz || sx, r = Math.max(bd[1] * sx, bd[3] * sz);
+      c.n++;
+      c.min = [Math.min(c.min[0], it.x - r), Math.min(c.min[1], it.y), Math.min(c.min[2], it.z - r)];
+      c.max = [Math.max(c.max[0], it.x + r), Math.max(c.max[1], it.y + bd[2] * sy), Math.max(c.max[2], it.z + r)];
+      c.b0 = Math.min(c.b0, it.b); c.b1 = Math.max(c.b1, it.b + W);
+    });
+  }
+  // who can do which job: the first is the specialist, the others lend a hand
+  const BY = {
+    Track: ['tracklayer'], Terrain: ['renderer', 'terraformer'], Sunflower: ['painter', 'gardener'], Lavender: ['painter', 'gardener'],
+    'Hay bale': ['carpenter', 'shipwright'], Windmill: ['rigger', 'mason'], Barn: ['carpenter', 'mason'], Silo: ['mason'], Fence: ['carpenter', 'lamplighter', 'shipwright'],
+    House: ['mason', 'painter'], Church: ['mason'], Pier: ['shipwright'], Sailboat: ['shipwright', 'rigger'], Lighthouse: ['lamplighter', 'mason'], Lamp: ['lamplighter'],
+    Tree: ['gardener', 'terraformer'], Pine: ['gardener', 'terraformer', 'rigger'], Rock: ['terraformer', 'mason'], Station: ['carpenter', 'mason', 'lamplighter'],
+    Cloud: ['cloudsmith'], Train: ['conductor'],
+  };
+  const centre = (c, p) => {   // where on screen a cluster is being worked on right now (follows the growth)
+    const g = cl((p - c.b0) / Math.max(W, c.b1 - c.b0));
+    return project([(c.min[0] + c.max[0]) / 2, c.min[1] + (c.max[1] - c.min[1]) * (0.35 + 0.45 * g), (c.min[2] + c.max[2]) / 2]);
+  };
+
+  // ------------------------------------------------------------------ Three.js
+  let THREE;
+  try { THREE = await import('three'); } catch (err) { console.error('[world] Three.js did not load', err); }
+  const gl = THREE && (() => { try { return new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' }); } catch (e) { return null; } })();
+  let project = () => null;
+  if (!gl) { swarm.start(); swarm.ready(canvas); throw new Error('[world] WebGL is not available'); }
+
+  gl.shadowMap.enabled = true;
+  gl.shadowMap.type = THREE.PCFShadowMap;
+  gl.toneMapping = THREE.ACESFilmicToneMapping;
+  gl.toneMappingExposure = 1.1;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.3, 900);
+  const C = (hex) => new THREE.Color(hex);
+
+  // -- the build effect, shared by every material: grow from the base (or appear), coral wireframe first
+  const U = { uP: { value: 0 }, uW: { value: W }, uT: { value: 0 } };
+  function buildable(mat, mode, { wire = false, depth = false, waves = false } = {}) {
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, U);
+      let body = 'vK = clamp((uP - aBuild) / uW, 0.0, 1.0);\n';
+      if (mode === 'grow') body += 'float gk = smoothstep(0.0, 0.55, vK);\ntransformed.y *= gk;\ntransformed.xz *= mix(0.5, 1.0, gk);\n';
+      if (waves) body += 'transformed.y += sin(transformed.x * 0.33 + uT * 1.5) * 0.12 + cos(transformed.z * 0.27 + uT * 1.15) * 0.1;\n';
+      body += 'if (vK <= 0.0) transformed = vec3(0.0);\n';
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aBuild;\nuniform float uP;\nuniform float uW;\nuniform float uT;\nvarying float vK;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + body);
+      let f = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vK;');
+      if (wire) f = f.replace('void main() {', 'void main() {\n float wa = vK > 0.0 ? 1.0 - smoothstep(0.45, 1.0, vK) : 0.0;\n if (wa < 0.01) discard;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.a *= wa;');
+      else if (depth) f = f.replace('void main() {', 'void main() {\n if (vK < 0.62) discard;');
+      else f = f.replace('void main() {', 'void main() {\n float dk = smoothstep(0.4, 1.0, vK);\n if (dk < 0.001) discard;\n if (dk < 0.999 && fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453) > dk) discard;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb = mix(vec3(1.0, 0.105, 0.042), diffuseColor.rgb, smoothstep(0.5, 1.0, vK));');
+      sh.fragmentShader = f;
     };
-    if (opts.tiers) b.tiers = opts.tiers;
-    else if (H > 4.2 && Math.min(w, d) > 1.0 && rnd() < 0.85) {
-      const k = rnd() < 0.6;
-      b.tiers = k ? [[0, 0.6, 1], [0.6, 0.85, 0.78], [0.85, 1, 0.56]] : [[0, 0.72, 1], [0.72, 1, 0.7]];
-    } else if (H > 2.4 && rnd() < 0.35) b.tiers = [[0, 0.76, 1], [0.76, 1, 0.72]];
-    else b.tiers = [[0, 1, 1]];
-    buildings.push(b);
-    // a few boxes on the roof: plant rooms, water tanks
-    const top = b.tiers[b.tiers.length - 1], tw = w * top[2], td = d * top[2];
-    if (!opts.bare && tw > 0.55 && td > 0.55 && rnd() < 0.8) {
-      const n = 1 + Math.floor(rnd() * 3);
-      for (let k = 0; k < n; k++) {
-        const kw = 0.12 + rnd() * 0.22, kd = 0.12 + rnd() * 0.22;
-        kit.push({ b, x: cx + (rnd() - 0.5) * (tw - kw - 0.16), z: cz + (rnd() - 0.5) * (td - kd - 0.16), w: kw, d: kd, h: 0.08 + rnd() * 0.12 });
+    mat.customProgramCacheKey = () => ['build', mode, wire, depth, waves].join('-');
+    return mat;
+  }
+  const solid = buildable(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }), 'grow');
+  const wire = buildable(new THREE.MeshBasicMaterial({ color: CORAL, wireframe: true, transparent: true, depthWrite: false, opacity: 0.9, toneMapped: false, fog: false }), 'grow', { wire: true });
+  const depth = buildable(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'grow', { depth: true });
+  const ground = buildable(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }), 'appear');
+  const groundWire = buildable(new THREE.MeshBasicMaterial({ color: CORAL, wireframe: true, transparent: true, depthWrite: false, opacity: 0.55, toneMapped: false, fog: false }), 'appear', { wire: true });
+  const groundDepth = buildable(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'appear', { depth: true });
+  const sea = buildable(new THREE.MeshPhongMaterial({ color: '#2cb6c0', specular: '#ffffff', shininess: 70, flatShading: true, transparent: true, opacity: 0.8 }), 'appear', { waves: true });
+  const seaWire = buildable(new THREE.MeshBasicMaterial({ color: CORAL, wireframe: true, transparent: true, depthWrite: false, opacity: 0.5, toneMapped: false, fog: false }), 'appear', { wire: true, waves: true });
+
+  // -- geometry helpers: primitives with flat vertex colours, merged into one geometry per kind
+  function part(g, color, { x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1, shade = null } = {}) {
+    g = g.index ? g.toNonIndexed() : g;
+    g.scale(sx, sy, sz); g.rotateX(rx); g.rotateY(ry); g.rotateZ(rz); g.translate(x, y, z);
+    const n = g.attributes.position.count, col = new Float32Array(n * 3), c = C(color), tmp = new THREE.Color();
+    for (let i = 0; i < n; i++) (shade ? tmp.copy(c).multiplyScalar(shade(g.attributes.position.getY(i), i)) : c).toArray(col, i * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.deleteAttribute('uv');
+    return g;
+  }
+  function merge(parts) {
+    const n = parts.reduce((a, g) => a + g.attributes.position.count, 0), pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+    let o = 0;
+    for (const g of parts) { pos.set(g.attributes.position.array, o * 3); col.set(g.attributes.color.array, o * 3); o += g.attributes.position.count; }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    out.computeVertexNormals();
+    return out;
+  }
+  const Box = (w, h, d) => new THREE.BoxGeometry(w, h, d).translate(0, h / 2, 0);
+  const Cyl = (r0, r1, h, n = 10) => new THREE.CylinderGeometry(r0, r1, h, n).translate(0, h / 2, 0);
+  const Cone = (r, h, n = 8) => new THREE.ConeGeometry(r, h, n).translate(0, h / 2, 0);
+  const Ico = (r, d = 1) => new THREE.IcosahedronGeometry(r, d);
+  function Gable(w, d, h) {   // a pitched roof, ridge along x
+    const a = w / 2, b = d / 2, v = [
+      -a, 0, b, a, 0, b, a, h, 0, -a, 0, b, a, h, 0, -a, h, 0,
+      a, 0, -b, -a, 0, -b, -a, h, 0, a, 0, -b, -a, h, 0, a, h, 0,
+      -a, 0, -b, -a, 0, b, -a, h, 0, a, 0, b, a, 0, -b, a, h, 0,
+    ];
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+    return g;
+  }
+  function Sail(h, w) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, h, 0, 0, 0, w, 0, 0, 0, 0, 0, w, 0, h, 0], 3));
+    return g;
+  }
+  const jitter = (g, k, sd) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const f = 1 + (h2(p.getX(i) * 3 + sd, p.getZ(i) * 3 + p.getY(i)) - 0.5) * k; p.setXYZ(i, p.getX(i) * f, p.getY(i) * f, p.getZ(i) * f); } return g; };
+
+  const GEO = {
+    sleeper: merge([part(Box(2.1, 0.16, 0.42), '#7b5a3e')]),
+    rail: merge([part(Box(0.13, 0.13, 1), '#aab1ba', { z: -0.5 }), part(Box(0.22, 0.04, 1), '#7d838c', { z: -0.5 })]),
+    sunflower: merge([part(Cyl(0.045, 0.05, 1.15, 5), '#4c8a2c'), part(Box(0.34, 0.03, 0.14), '#5c9c34', { y: 0.55, ry: 0.6 }),
+      part(Cyl(0.3, 0.3, 0.07, 10), '#f6c21a', { y: 1.2, rx: Math.PI / 2.4 }), part(Cyl(0.14, 0.14, 0.09, 8), '#6a4224', { y: 1.21, z: 0.02, rx: Math.PI / 2.4 })]),
+    lavender: merge([part(Ico(0.42, 1), '#6f8f4a', { y: 0.22, sy: 0.55 }), part(Ico(0.36, 1), '#9b7fd9', { y: 0.36, sy: 0.6 }),
+      ...[[0.16, 0.1], [-0.15, 0.08], [0.02, -0.17], [-0.05, 0.18]].map(([x, z], k) => part(Cone(0.07, 0.42, 5), k % 2 ? '#b9a2ee' : '#8d6fd0', { x, z, y: 0.45 }))]),
+    hay: merge([part(Cyl(0.62, 0.62, 1.1, 12), '#e8c45a', { rz: Math.PI / 2, x: 0.55, y: 0.62 }), part(Cyl(0.5, 0.5, 1.12, 12), '#f3d88a', { rz: Math.PI / 2, x: 0.56, y: 0.62 })]),
+    fence: merge([part(Box(0.14, 0.95, 0.14), '#8a6142'), part(Box(0.08, 0.08, 2.4), '#a57955', { y: 0.45, z: 1.2 }), part(Box(0.08, 0.08, 2.4), '#a57955', { y: 0.8, z: 1.2 })]),
+    windmill: merge([part(Cyl(1.0, 1.6, 7.4, 10), '#f6f0e4'), part(Cone(1.3, 1.6, 10), '#c84a3a', { y: 7.4 }), part(Box(0.6, 1.1, 0.1), '#5b3a2a', { z: 1.45, y: 0 }),
+      part(Box(0.4, 0.5, 0.08), '#3b5370', { z: 1.2, y: 3.6 }), part(Cyl(0.18, 0.18, 0.9, 8), '#3a3a3e', { y: 6.8, z: 1.0, rx: Math.PI / 2 })]),
+    blades: merge([0, 1, 2, 3].flatMap((k) => [part(Box(0.5, 4.4, 0.07), '#fff8ee', { y: 0.35, rz: k * Math.PI / 2 }), part(Box(0.12, 4.6, 0.12), '#c84a3a', { y: 0.1, rz: k * Math.PI / 2 })])
+      .concat([part(Cyl(0.32, 0.32, 0.3, 10), '#c84a3a', { rx: Math.PI / 2 })])),
+    barn: merge([part(Box(6.4, 3.4, 4.4), '#c4452f'), part(Gable(6.9, 5.0, 2.2), '#5d4a44', { y: 3.4 }), part(Box(1.8, 2.2, 0.08), '#f4ede2', { z: 2.22 }),
+      part(Box(1.5, 1.9, 0.1), '#9d3524', { z: 2.24 }), part(Box(0.7, 0.7, 0.08), '#f4ede2', { z: 2.22, y: 2.9 })]),
+    silo: merge([part(Cyl(1.25, 1.25, 6.2, 14), '#dcd6ca'), part(new THREE.SphereGeometry(1.27, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), '#a9b4bd', { y: 6.2 }),
+      ...[1.5, 3, 4.5].map((y) => part(Cyl(1.29, 1.29, 0.12, 14), '#b9b2a6', { y }))]),
+    house: merge([part(Box(1, 1, 1), '#ffffff'), ...[-0.25, 0.25].flatMap((x) => [part(Box(0.17, 0.22, 0.02), '#43566e', { x, y: 0.62, z: 0.505 }), part(Box(0.17, 0.22, 0.02), '#43566e', { x, y: 0.62, z: -0.505 })]),
+      part(Box(0.2, 0.36, 0.02), '#7a5038', { y: 0, z: 0.506 }), part(Box(0.02, 0.2, 0.15), '#43566e', { x: 0.505, y: 0.62 }), part(Box(0.02, 0.2, 0.15), '#43566e', { x: -0.505, y: 0.62 })]),
+    roof: merge([part(Gable(1.12, 1.16, 0.45), '#ffffff'), part(Box(0.14, 0.42, 0.14), '#d8d0c6', { x: 0.28, z: -0.18, y: 0.1 })]),
+    church: merge([part(Box(4.4, 4.6, 7.4), '#f2e8d6', { z: -1.5 }), part(Gable(4.8, 7.8, 2.6), '#5b6b7a', { y: 4.6, z: -1.5, ry: Math.PI / 2 }),
+      part(Box(2.6, 9.4, 2.6), '#efe3cf', { z: 2.4 }), part(Cone(2.0, 3.8, 4), '#4f6278', { y: 9.4, z: 2.4, ry: Math.PI / 4 }),
+      part(Cyl(0.7, 0.7, 0.1, 16), '#fffaf0', { y: 7.6, z: 3.72, rx: Math.PI / 2 }), part(Box(0.07, 0.5, 0.04), '#2b2f36', { y: 7.8, z: 3.79 }),
+      part(Box(0.8, 1.5, 0.06), '#6a4630', { z: 3.72 }), part(Box(0.4, 1.1, 0.05), '#43566e', { y: 5.4, z: 3.72 })]),
+    pier: merge([part(Box(2.4, 0.22, 16), '#a07650', { z: 8 }), ...[2, 6, 10, 14].flatMap((z) => [part(Cyl(0.16, 0.16, 2.6, 6), '#6e4f36', { x: 1.0, y: -2.2, z }), part(Cyl(0.16, 0.16, 2.6, 6), '#6e4f36', { x: -1.0, y: -2.2, z })])]),
+    boat: merge([part(Box(1.3, 0.55, 3.2), '#ffffff', { y: 0.05 }), part(Cone(0.65, 1.0, 4), '#ffffff', { rx: Math.PI / 2, ry: Math.PI / 4, y: 0.33, z: 1.6 }),
+      part(Box(1.34, 0.12, 3.24), '#2f6ea8', { y: 0.32 }), part(Box(1.0, 0.1, 2.6), '#c9a37a', { y: 0.6 }),
+      part(Cyl(0.05, 0.06, 4.6, 6), '#e9e4da', { y: 0.6, z: 0.3 }), part(Sail(4.0, 2.2), '#fffaf0', { y: 0.95, z: 0.32 }), part(Sail(3.0, 1.2), '#ffd28c', { y: 0.95, z: 0.28, ry: Math.PI })]),
+    lighthouse: merge([part(Cyl(1.9, 2.3, 1.1, 12), '#9a948d'), ...[0, 1, 2, 3, 4, 5].map((k) => part(Cyl(1.25 - (k + 1) * 0.07, 1.25 - k * 0.07, 1.5, 12), k % 2 ? '#f7f2ea' : '#d6453b', { y: 1.1 + k * 1.5 })),
+      part(Cyl(1.25, 1.25, 0.22, 12), '#2f3338', { y: 10.1 }), part(Cyl(0.62, 0.62, 1.1, 10), '#fff1b5', { y: 10.3 }), part(Cone(0.85, 1.0, 10), '#b83a31', { y: 11.4 })]),
+    lamp: merge([part(Cyl(0.06, 0.08, 2.3, 6), '#2f3338'), part(Box(0.3, 0.34, 0.3), '#ffe3a1', { y: 2.3 }), part(Cone(0.26, 0.2, 4), '#2f3338', { y: 2.64, ry: Math.PI / 4 })]),
+    tree: merge([part(Cyl(0.17, 0.26, 1.5, 6), '#7a5134'), part(jitter(Ico(1.35, 1), 0.22, 1), '#6fbe4a', { y: 2.3, sy: 0.92 }), part(jitter(Ico(0.85, 1), 0.2, 2), '#5aa63c', { y: 3.05, x: 0.45, z: -0.2 })]),
+    pine: merge([part(Cyl(0.14, 0.2, 0.9, 6), '#6b4a33'), part(Cone(1.35, 2.1, 7), '#2f7a4a', { y: 0.7 }), part(Cone(1.05, 1.8, 7), '#3a8a54', { y: 1.75 }), part(Cone(0.72, 1.5, 7), '#46985e', { y: 2.75 })]),
+    pineSnow: merge([part(Cyl(0.14, 0.2, 0.9, 6), '#6b4a33'), part(Cone(1.35, 2.1, 7), '#2f7a4a', { y: 0.7 }), part(Cone(1.05, 1.8, 7), '#3a8a54', { y: 1.75 }), part(Cone(0.74, 1.5, 7), '#f2f6fa', { y: 2.75 }), part(Cone(1.08, 0.6, 7), '#eef3f8', { y: 2.95 })]),
+    rock: merge([part(jitter(new THREE.DodecahedronGeometry(1, 0), 0.35, 4), '#8e8984', { y: 0.55 })]),
+    station: merge([part(Box(10, 0.6, 3.4), '#cfc6b6'), part(Box(4.6, 3.0, 2.8), '#f3e6cc', { y: 0.6, x: 0.8 }), part(Gable(5.2, 3.4, 1.6), '#b5473a', { y: 3.6, x: 0.8 }),
+      part(Box(8.6, 0.14, 2.0), '#6a4a36', { y: 3.0, z: -0.9 }), ...[-3.6, -1, 3.6].map((x) => part(Cyl(0.08, 0.08, 2.4, 6), '#5a4030', { x, y: 0.6, z: -1.6 })),
+      part(Box(0.9, 1.5, 0.06), '#6a4630', { y: 0.6, z: -1.42, x: 0.2 }), ...[-0.9, 1.6].map((x) => part(Box(0.7, 0.8, 0.05), '#43566e', { y: 1.5, z: -1.42, x })),
+      part(Cyl(0.36, 0.36, 0.08, 14), '#fffaf0', { y: 2.5, z: -1.5, x: 2.4, rx: Math.PI / 2 }), part(Cyl(0.05, 0.05, 3.6, 6), '#d8d2c8', { x: -4.6, y: 0.6, z: 1.2 }),
+      part(Box(1.1, 0.7, 0.04), '#ff5b3a', { x: -4.05, y: 3.6, z: 1.2 })]),
+    cloud: merge([[0, 0, 0, 2.6], [2.4, -0.4, 0.4, 2.0], [-2.5, -0.5, -0.2, 2.1], [1.0, 1.3, -0.3, 1.9], [-1.1, 1.0, 0.5, 1.6], [4.2, -0.9, 0, 1.4], [-4.3, -0.9, 0.3, 1.3]]
+      .map(([x, y, z, r], k) => part(jitter(Ico(r, 1), 0.14, k), '#ffffff', { x, y: y + 2.4, z, sy: 0.82, shade: (py) => (py < 1.8 ? 1.25 : 1.45) }))),
+  };
+
+  // -- instances, with their build times
+  const mats = new THREE.Matrix4(), quat = new THREE.Quaternion(), eul = new THREE.Euler(), vec = new THREE.Vector3(), scl = new THREE.Vector3(), col = new THREE.Color();
+  const meshes = {};
+  const compose = (it, extra = 0) => mats.compose(vec.set(it.x, it.y, it.z), quat.setFromEuler(eul.set(it.rx || 0, (it.ry || 0) + extra, it.rz || 0)), scl.set(it.sx || 1, it.sy || it.sx || 1, it.sz || it.sx || 1));
+  function realize(kind, geoKey = kind, list = things[kind]) {
+    if (!list || !list.length) return null;
+    const g = GEO[geoKey].clone();
+    g.setAttribute('aBuild', new THREE.InstancedBufferAttribute(new Float32Array(list.map((it) => it.b)), 1));
+    const a = new THREE.InstancedMesh(g, solid, list.length), w = new THREE.InstancedMesh(g, wire, list.length);
+    list.forEach((it, i) => { compose(it); a.setMatrixAt(i, mats); w.setMatrixAt(i, mats); if (it.color) a.setColorAt(i, col.set(it.color)); });
+    a.castShadow = kind !== 'cloud'; a.receiveShadow = true; a.customDepthMaterial = depth;
+    a.frustumCulled = w.frustumCulled = false;
+    w.renderOrder = 2;
+    const b0 = Math.min(...list.map((it) => it.b)), b1 = Math.max(...list.map((it) => it.b)) + W;
+    scene.add(a, w);
+    return (meshes[kind] = { a, w, list, b0, b1 });
+  }
+  for (const k of Object.keys(things)) if (GEO[k]) realize(k);
+  const blades = realize('blades', 'blades', things.windmill.map((it) => ({ ...it, b: it.b + 0.012 })));
+
+  // -- the land: a low-poly heightfield, coloured by what it is, appearing just ahead of the build front
+  const X0 = -160, X1 = 175, Z0 = -260, Z1 = 225, NX = 134, NZ = 194;
+  const gx = (i) => X0 + (X1 - X0) * i / NX, gz = (j) => Z0 + (Z1 - Z0) * j / NZ;
+  const GP = [];
+  for (let j = 0; j <= NZ; j++) for (let i = 0; i <= NX; i++) {
+    const edge = i === 0 || j === 0 || i === NX || j === NZ;
+    const x = gx(i) + (edge ? 0 : (h2(i, j) - 0.5) * 1.3), z = gz(j) + (edge ? 0 : (h2(j + 9, i) - 0.5) * 1.3), nr = nearest(x, z);
+    GP.push([x, height(x, z, nr), z, nr]);
+  }
+  const COL = {
+    grass: C('#8cc650'), grass2: C('#76b444'), town: C('#88c255'), alp: C('#6aa84a'), dry: C('#93a85c'), forest: C('#5e9440'),
+    sand: C('#ecd8a2'), bed: C('#d6c28e'), deep: C('#4f9a93'), rock: C('#958d86'), rock2: C('#7d7670'), snow: C('#f2f6fa'), ballast: C('#a39380'),
+    soil: C('#8f6c47'), rowG: C('#6eae3d'), lavG: C('#7f9a4c'), wheat: C('#e6c45e'), wheat2: C('#d8b14a'), field: C('#9bcc4f'), field2: C('#86bd44'),
+  };
+  function groundColour(x, y, z, ny, nr, out) {
+    const n = fbm(x * 0.08, z * 0.08), dc = coastX(z) - x;
+    if (nr.d < 1.9 && y > -0.2) return out.copy(COL.ballast).multiplyScalar(0.95 + n * 0.1);
+    if (y < -0.25) return out.copy(COL.bed).lerp(COL.deep, cl(-y / 4.5));
+    if (y < 0.85 && dc < 14) return out.copy(COL.sand);
+    const fi = inField(x, z);
+    if (fi) {
+      const row = Math.floor((fi.v + 50) / ({ sun: 1.1, lav: 1.25, wheat: 2.2, green: 2.0 })[fi.f.crop]) % 2;
+      const pair = { sun: [COL.soil, COL.rowG], lav: [COL.soil, COL.lavG], wheat: [COL.wheat, COL.wheat2], green: [COL.field, COL.field2] }[fi.f.crop];
+      return out.copy(pair[row]);
+    }
+    if (y > 58 + n * 10 && ny > 0.45) return out.copy(COL.snow);
+    if (ny < 0.72 || y > 52 + n * 8) return out.copy(n > 0.5 ? COL.rock : COL.rock2).lerp(COL.snow, cl((y - 60) / 14));
+    const base = z > 50 ? (n > 0.48 ? COL.grass : COL.grass2) : z > -12 ? COL.town : COL.alp;
+    out.copy(base).lerp(COL.dry, cl((y - 30) / 22) * 0.7);
+    if (z < -12 && fbm(x * 0.05, z * 0.05) > 0.42) out.lerp(COL.forest, 0.6);
+    return out.multiplyScalar(0.94 + n * 0.12);
+  }
+  {
+    const tris = NX * NZ * 2, pos = new Float32Array(tris * 9), cols = new Float32Array(tris * 9), ab = new Float32Array(tris * 3), fs = new Float32Array(tris), fd = new Float32Array(tris);
+    const c = new THREE.Color(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), nm = new THREE.Vector3();
+    let t = 0;
+    const id = (i, j) => j * (NX + 1) + i;
+    const face = (A, B, Cc) => {
+      const cx = (A[0] + B[0] + Cc[0]) / 3, cy = (A[1] + B[1] + Cc[1]) / 3, cz = (A[2] + B[2] + Cc[2]) / 3;
+      e1.set(B[0] - A[0], B[1] - A[1], B[2] - A[2]); e2.set(Cc[0] - A[0], Cc[1] - A[1], Cc[2] - A[2]); nm.crossVectors(e1, e2).normalize();
+      const nr = A[3].d < B[3].d ? (A[3].d < Cc[3].d ? A[3] : Cc[3]) : (B[3].d < Cc[3].d ? B[3] : Cc[3]);
+      groundColour(cx, cy, cz, Math.abs(nm.y), nr, c);
+      const b = buildAt(nr.s + Math.max(0, nr.d - 16) * 0.32, 84);
+      [A, B, Cc].forEach((P, k) => { pos.set([P[0], P[1], P[2]], t * 9 + k * 3); c.toArray(cols, t * 9 + k * 3); ab[t * 3 + k] = b; });
+      fs[t] = nr.s; fd[t] = nr.d;
+      t++;
+    };
+    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+      const a = GP[id(i, j)], b = GP[id(i + 1, j)], cc = GP[id(i, j + 1)], d = GP[id(i + 1, j + 1)];
+      if ((i + j) % 2) { face(a, cc, b); face(b, cc, d); } else { face(a, cc, d); face(a, d, b); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    g.setAttribute('aBuild', new THREE.BufferAttribute(ab, 1));
+    g.computeVertexNormals();
+    const land = new THREE.Mesh(g, ground), landWire = new THREE.Mesh(g, groundWire);
+    land.receiveShadow = true; land.castShadow = true; land.customDepthMaterial = groundDepth;
+    land.frustumCulled = landWire.frustumCulled = false; landWire.renderOrder = 2;
+    scene.add(land, landWire);
+    // terrain clusters for the overlay: the ground near the line, in squares
+    const tc = new Map();
+    for (let k = 0; k < t; k++) {
+      if (fd[k] > 30) continue;
+      const x = pos[k * 9], y = pos[k * 9 + 1], z = pos[k * 9 + 2], b = ab[k * 3], key = Math.floor(x / 40) + ',' + Math.floor(z / 40);
+      let c2 = tc.get(key);
+      if (!c2) { c2 = { label: 'Terrain', n: 0, min: [1e9, 1e9, 1e9], max: [-1e9, -1e9, -1e9], b0: 1, b1: 0 }; tc.set(key, c2); clusters.push(c2); }
+      c2.n++; c2.min = [Math.min(c2.min[0], x), Math.min(c2.min[1], y), Math.min(c2.min[2], z)]; c2.max = [Math.max(c2.max[0], x), Math.max(c2.max[1], y), Math.max(c2.max[2], z)];
+      c2.b0 = Math.min(c2.b0, b); c2.b1 = Math.max(c2.b1, b + W);
+    }
+  }
+  // -- the sea, with low-poly waves
+  {
+    const sx0 = 8, sx1 = 260, sz0 = -260, sz1 = 225, nx = 56, nz = 100, tris = nx * nz * 2;
+    const pos = new Float32Array(tris * 9), ab = new Float32Array(tris * 3);
+    let t = 0;
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+      const x0 = sx0 + (sx1 - sx0) * i / nx, x1 = sx0 + (sx1 - sx0) * (i + 1) / nx, z0 = sz0 + (sz1 - sz0) * j / nz, z1 = sz0 + (sz1 - sz0) * (j + 1) / nz;
+      for (const tri of [[[x0, z0], [x0, z1], [x1, z1]], [[x0, z0], [x1, z1], [x1, z0]]]) {
+        const cx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3, cz = (tri[0][1] + tri[1][1] + tri[2][1]) / 3, nr = nearest(cx, cz);
+        const b = buildAt(nr.s + Math.max(0, nr.d - 20) * 0.3, 84);
+        tri.forEach(([x, z], k) => { pos.set([x, 0, z], t * 9 + k * 3); ab[t * 3 + k] = b; });
+        t++;
       }
     }
-    return b;
-  }
-  function addTree(x, z, slotM) {
-    const dia = 0.34 + rnd() * 0.28;
-    trees.push({ x, z, dia, h: dia * (1.0 + rnd() * 0.35), trunk: 0.1 + rnd() * 0.1, seed: rnd(), slotM });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('aBuild', new THREE.BufferAttribute(ab, 1));
+    g.computeVertexNormals();
+    const water = new THREE.Mesh(g, sea), waterWire = new THREE.Mesh(g, seaWire);
+    water.receiveShadow = true; water.frustumCulled = waterWire.frustumCulled = false; water.renderOrder = 1; waterWire.renderOrder = 2;
+    scene.add(water, waterWire);
   }
 
-  let tower = null, monument = null;
-  const parkAt = [];
-  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
-    const bx = at(i), bz = at(j);
-    const blockM = 0.03 + 0.5 * slotFor(bx, bz);
-    if (i === PLAZA[0] && j === PLAZA[1]) {
-      // the plaza: an obelisk on a plinth, ringed by trees
-      monument = { cx: bx, cz: bz, H: 3.23, slot: 0.02, riseD: 0.25, slotM: 0.0, seed: rnd() };
-      for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) addTree(bx + x * 1.06, bz + z * 1.06, 0.06 + rnd() * 0.05);
-      for (const [x, z] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) addTree(bx + x * 1.12 + (x ? 0 : 0.42), bz + z * 1.12 + (z ? 0 : 0.42), 0.08 + rnd() * 0.05);
-      continue;
-    }
-    if (PARKS.some(([a, c]) => a === i && c === j)) {
-      parkAt.push([bx, bz]);
-      let n = 0, tries = 0;
-      while (n < 18 && tries++ < 400) {
-        const x = (rnd() * 2 - 1) * (S2 - 0.22), z = (rnd() * 2 - 1) * (S2 - 0.22);
-        if (Math.abs(x - z) < 0.3 || Math.abs(x + z) < 0.3 || Math.abs(Math.hypot(x, z) - 0.8) < 0.24) continue;
-        addTree(bx + x, bz + z, blockM - 0.02 + rnd() * 0.1);
-        n++;
+  // -- the train: a red engine and two coaches, assembled first
+  function car(parts, b0) {
+    const g = merge(parts.map(([geo, color, o], k) => part(geo, color, o)));
+    const n = g.attributes.position.count, ab = new Float32Array(n);
+    let o = 0;
+    parts.forEach(([geo], k) => { const c = geo.index ? geo.index.count : geo.attributes.position.count; for (let i = 0; i < c; i++) ab[o + i] = b0 + k * 0.0012; o += c; });
+    g.setAttribute('aBuild', new THREE.BufferAttribute(ab, 1));
+    const a = new THREE.Mesh(g, solid), w = new THREE.Mesh(g, wire);
+    a.castShadow = a.receiveShadow = true; a.customDepthMaterial = depth; w.renderOrder = 2;
+    const grp = new THREE.Group(); grp.add(a, w); scene.add(grp);
+    return grp;
+  }
+  const wheels = (z0, n, r, col2) => [-0.82, 0.82].flatMap((x) => Array.from({ length: n }, (_, k) => [Cyl(r, r, 0.16, 12), col2, { x, y: r * 0.02, z: z0 + k * r * 2.3, rz: Math.PI / 2, sy: 1 }]));
+  const loco = car([
+    [Box(1.6, 0.4, 5.4), '#2a2a2f', { y: 0.32, z: 0.2 }], ...wheels(-1.4, 3, 0.46, '#c4382a').map((p) => [p[0], p[1], { ...p[2], y: 0.46 }]),
+    [Cyl(0.78, 0.78, 3.3, 16), '#d23f2c', { rx: Math.PI / 2, y: 1.42, z: -0.7 }], ...[0.0, 1.0, 2.0].map((z) => [Cyl(0.81, 0.81, 0.12, 16), '#e2b04a', { rx: Math.PI / 2, y: 1.42, z: z + 0.1 }]),
+    [Cyl(0.8, 0.8, 0.5, 16), '#26262b', { rx: Math.PI / 2, y: 1.42, z: 2.62 }], [Cyl(0.3, 0.22, 1.0, 10), '#26262b', { y: 2.0, z: 2.25 }], [Cyl(0.33, 0.33, 0.14, 10), '#e2b04a', { y: 2.95, z: 2.25 }],
+    [new THREE.SphereGeometry(0.36, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), '#e2b04a', { y: 2.15, z: 0.9 }],
+    [Box(1.75, 1.8, 1.6), '#c63a29', { y: 0.55, z: -1.45 }], [Box(1.95, 0.16, 1.9), '#26262b', { y: 2.35, z: -1.45 }], [Box(1.78, 0.5, 0.6), '#2f3f50', { y: 1.65, z: -1.45 }],
+    [Box(1.5, 0.34, 0.5), '#e2b04a', { y: 0.1, z: 2.95 }], [Cyl(0.16, 0.16, 0.25, 10), '#fff2b8', { rx: Math.PI / 2, y: 1.42, z: 2.95 }],
+  ], 0.004);
+  const coach = (body) => car([
+    [Box(1.6, 0.36, 4.6), '#2a2a2f', { y: 0.3 }], ...wheels(-1.6, 2, 0.32, '#3a3a40').map((p) => [p[0], p[1], { ...p[2], y: 0.32 }]),
+    ...wheels(0.9, 2, 0.32, '#3a3a40').map((p) => [p[0], p[1], { ...p[2], y: 0.32 }]),
+    [Box(1.8, 1.5, 4.4), body, { y: 0.66 }], [Box(1.83, 0.42, 3.8), '#33475a', { y: 1.38 }], [Box(1.86, 0.08, 4.42), '#e2b04a', { y: 1.15 }],
+    [Box(1.95, 0.22, 4.6), '#f3ead8', { y: 2.16 }], [Box(1.5, 0.12, 4.3), '#e6dbc6', { y: 2.36 }],
+  ], 0.014);
+  const coaches = [coach('#2f9c95'), coach('#e2a53b')];
+  const OFFS = [0, -5.5, -10.6];
+  // smoke from the chimney
+  const PUFFS = 40, puffMesh = new THREE.InstancedMesh(jitter(Ico(0.5, 1), 0.25, 3), new THREE.MeshLambertMaterial({ color: '#fbf8f2', emissive: '#3a3a40', flatShading: true }), PUFFS);
+  puffMesh.frustumCulled = false; puffMesh.castShadow = false; scene.add(puffMesh);
+
+  // -- sky, sun, light
+  const skyU = { uZen: { value: C('#2c7fdc') }, uHzn: { value: C('#c8e5f6') }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: C('#fff1d8') }, uGlow: { value: 0.4 } };
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(850, 32, 16), new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false, uniforms: skyU,
+    vertexShader: 'varying vec3 vD; void main() { vD = normalize(position); vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; }',
+    fragmentShader: `uniform vec3 uZen, uHzn, uSun, uSunCol; uniform float uGlow; varying vec3 vD;
+      void main() {
+        vec3 d = normalize(vD); float h = max(d.y, 0.0), s = max(dot(d, normalize(uSun)), 0.0);
+        vec3 c = mix(uHzn, uZen, pow(h, 0.42));
+        c += uSunCol * (pow(s, 8.0) * 0.35 + pow(s, 64.0) * 0.6) * uGlow + uSunCol * smoothstep(0.9993, 0.9997, s) * 1.5;
+        gl_FragColor = vec4(c, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  }));
+  sky.renderOrder = -1; sky.frustumCulled = false; scene.add(sky);
+  scene.fog = new THREE.Fog('#d4ebf8', 70, 360);
+  const hemi = new THREE.HemisphereLight('#cfe9ff', '#7a9a5a', 1.15);
+  const sunL = new THREE.DirectionalLight('#fff3df', 2.6);
+  sunL.castShadow = true;
+  const small = Math.min(innerWidth, innerHeight) < 700;
+  sunL.shadow.mapSize.set(small ? 1024 : 2048, small ? 1024 : 2048);
+  sunL.shadow.bias = -0.0004; sunL.shadow.normalBias = 0.35;
+  scene.add(hemi, sunL, sunL.target);
+  // warm glows for the lamps and the lighthouse at golden hour
+  const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.25, 'rgba(255,220,150,.75)'); g.addColorStop(1, 'rgba(255,180,90,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+  const glowPts = [...(things.lamp || []).map((it) => [it.x, it.y + 2.48, it.z]), [ISLE[0], land(ISLE[0], ISLE[1], nearest(ISLE[0], ISLE[1])) + 10.5, ISLE[1]]];
+  const glowGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(glowPts.flat(), 3));
+  const glowMat = new THREE.PointsMaterial({ size: 2.4, map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: '#ffc77a', opacity: 0 });
+  const glows = new THREE.Points(glowGeo, glowMat); glows.frustumCulled = false; scene.add(glows);
+
+  // ------------------------------------------------------------------ the camera: rides behind the train, then looks back from the top
+  const ZONES = [[0, { h: 6.2, back: 13, side: -1.6, look: 0.4 }], [128, { h: 6.2, back: 13, side: -1.6, look: 0.4 }], [162, { h: 7.2, back: 14, side: -3.6, look: 4.5 }],
+    [222, { h: 7.2, back: 14, side: -3.6, look: 4.5 }], [256, { h: 8.6, back: 15, side: 2.6, look: -1.5 }], [1e9, { h: 8.6, back: 15, side: 2.6, look: -1.5 }]];
+  function zone(s) {
+    for (let i = 0; i < ZONES.length - 1; i++) if (s < ZONES[i + 1][0]) { const [s0, a] = ZONES[i], [s1, b] = ZONES[i + 1], k = sm(s0, s1, s); const o = {}; for (const key in a) o[key] = lerp(a[key], b[key], k); return o; }
+    return ZONES[ZONES.length - 1][1];
+  }
+  function chase(sT) {
+    const pos = [0, 0, 0], tgt = [0, 0, 0], tall = camera.aspect < 0.9;   // a narrow screen keeps the train centred, from further back
+    for (let k = -4; k <= 4; k++) {
+      const s = sT + k * 1.4, z = zone(s), back = z.back + 10.6 + (tall ? 6 : 0), a = pathAt(s - back), f = pathAt(s + 16);
+      const side = z.side * (tall ? 0.15 : 1), look = z.look * (tall ? 0.25 : 1), h = z.h + (tall ? 3 : 0);
+      for (let i = 0; i < 3; i++) {
+        pos[i] += (a.p[i] + a.r[i] * side + (i === 1 ? h : 0)) / 9;
+        tgt[i] += (f.p[i] + f.r[i] * look + (i === 1 ? 1.1 : 0)) / 9;
       }
-      continue;
     }
-    if (i === TOWER[0] && j === TOWER[1]) {
-      // the landmark: a podium and a glass tower stepping back twice, topped with a spire
-      addBuilding(bx, bz, 2.72, 2.72, 0.9, 1, { slot: 0.03, riseD: 0.18, slotM: 0.02, bare: true });
-      tower = addBuilding(bx, bz, 1.9, 1.9, 13.3, 0, {
-        slot: 0.03, riseD: 0.55, slotM: 0.0, bare: true,
-        tiers: [[0, 6.5 / 13.3, 1], [6.5 / 13.3, 9.4 / 13.3, 0.79], [9.4 / 13.3, 11.5 / 13.3, 0.58], [11.5 / 13.3, 1, 0.045, 5]],
-      });
-      continue;
+    return { pos, tgt };
+  }
+  const end = pathAt(LEN - 7);
+  const REVEAL = { pos: [end.p[0] - 4, end.p[1] + 36, end.p[2] - 44], tgt: [10, 6, 6] };
+
+  // ------------------------------------------------------------------ the construction overlay: boxes, handles and counts
+  const mx = marks.getContext('2d');
+  const corners = new THREE.Vector3(), viewP = new THREE.Vector3();
+  project = (p) => {
+    viewP.set(p[0], p[1], p[2]).applyMatrix4(camera.matrixWorldInverse);
+    if (viewP.z > -camera.near) return null;
+    corners.set(p[0], p[1], p[2]).project(camera);
+    const r = canvas.getBoundingClientRect(), x = r.left + (corners.x * 0.5 + 0.5) * r.width, y = r.top + (0.5 - corners.y * 0.5) * r.height;
+    return x < -40 || y < -40 || x > r.right + 40 || y > r.bottom + 40 ? null : { x, y };
+  };
+  const fmt = (n) => n.toLocaleString('en-US');
+  function drawMarks(p) {
+    const r = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    if (marks.width !== Math.round(r.width * dpr)) { marks.width = Math.round(r.width * dpr); marks.height = Math.round(r.height * dpr); }
+    mx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    mx.clearRect(0, 0, r.width, r.height);
+    if (p <= 0 || p >= 1.05) return;
+    mx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
+    mx.textBaseline = 'middle';
+    const taken = [];
+    for (const c of clusters) {
+      const a = Math.min(sm(c.b0 - 0.004, c.b0 + 0.004, p), 1 - sm(c.b1 + 0.01, c.b1 + 0.03, p));
+      if (a <= 0.01) continue;
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, ok = 0;
+      for (let k = 0; k < 8; k++) {
+        const q = [k & 1 ? c.max[0] : c.min[0], k & 2 ? c.max[1] : c.min[1], k & 4 ? c.max[2] : c.min[2]];
+        viewP.set(q[0], q[1], q[2]).applyMatrix4(camera.matrixWorldInverse);
+        if (viewP.z > -camera.near) continue;
+        corners.set(q[0], q[1], q[2]).project(camera);
+        const sx = (corners.x * 0.5 + 0.5) * r.width, sy = (0.5 - corners.y * 0.5) * r.height;
+        x0 = Math.min(x0, sx); y0 = Math.min(y0, sy); x1 = Math.max(x1, sx); y1 = Math.max(y1, sy); ok++;
+      }
+      if (ok < 4) continue;
+      x0 = Math.max(x0, -2); y0 = Math.max(y0, -2); x1 = Math.min(x1, r.width + 2); y1 = Math.min(y1, r.height + 2);
+      const w = x1 - x0, h = y1 - y0;
+      if (w < 10 || h < 8 || w > r.width * 0.72 || h > r.height * 0.72) continue;
+      mx.globalAlpha = a;
+      mx.strokeStyle = CORAL; mx.lineWidth = 1;
+      mx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(w), Math.round(h));
+      mx.fillStyle = '#fff';
+      for (const [hx, hy] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) { mx.fillRect(Math.round(hx) - 2, Math.round(hy) - 2, 5, 5); mx.strokeRect(Math.round(hx) - 2 + 0.5, Math.round(hy) - 2 + 0.5, 4, 4); }
+      const text = c.n > 1 ? c.label + ' ×' + fmt(c.n) : c.label, tw = mx.measureText(text).width + 12;
+      const lx = Math.round(Math.min(Math.max(x0, 4), r.width - tw - 4)), ly = Math.round(y0 - 20);
+      if (ly < 2 || taken.some((q) => lx < q[0] + q[2] + 4 && lx + tw + 4 > q[0] && ly < q[1] + 18 && ly + 18 > q[1])) continue;
+      taken.push([lx, ly, tw]);
+      mx.fillStyle = CORAL;
+      mx.beginPath(); mx.roundRect(lx, ly, tw, 16, 4); mx.fill();
+      mx.fillStyle = '#fff'; mx.fillText(text, lx + 6, ly + 8.5);
     }
-    const edge = i === 0 || j === 0 || i === N - 1 || j === N - 1;
-    const down = Math.exp(-((i - 4) ** 2 + ((j - 3.4) * 1.1) ** 2) / 5.5);
-    const hMax = edge ? 0.7 + rnd() * 0.9 : 0.9 + 8.0 * down;
-    const g = 0.07, r = rnd();
-    let lots;
-    if (!edge && hMax > 5.2 && r < 0.55) lots = [[-S2, -S2, S2, S2]];
-    else if (r < 0.3) lots = rnd() < 0.5 ? [[-S2, -S2, -g, S2], [g, -S2, S2, S2]] : [[-S2, -S2, S2, -g], [-S2, g, S2, S2]];
-    else if (r < 0.66) lots = [[-S2, -S2, -g, -g], [g, -S2, S2, -g], [-S2, g, -g, S2], [g, g, S2, S2]];
-    else lots = rnd() < 0.5 ? [[-S2, -S2, -g, S2], [g, -S2, S2, -g], [g, g, S2, S2]] : [[-S2, -S2, S2, -g], [-S2, g, -g, S2], [g, g, S2, S2]];
-    for (const [x0, z0, x1, z1] of lots) {
-      const w = x1 - x0 - 0.06, d = z1 - z0 - 0.06;
-      const size = Math.sqrt(w * d) / (2 * S2);
-      const H = Math.max(0.45, Math.min(11, hMax * (0.5 + 0.5 * rnd()) * (0.45 + 0.55 * size)));
-      const type = H > 4.5 ? (rnd() < 0.65 ? 0 : 1) : H > 1.7 ? (rnd() < 0.18 ? 0 : 1) : 2;
-      addBuilding(bx + (x0 + x1) / 2, bz + (z0 + z1) / 2, w, d, H, type);
-    }
+    mx.globalAlpha = 1;
   }
 
   // ------------------------------------------------------------------ build sites for the crew
-  const heightNow = (b, p) => sm(cl((geoOf(p) - b.slot) / b.riseD)) * b.H;
-  const cladNow = (b, p) => cl((matOf(p) - b.slotM) / 0.28) * b.H;
-  const pick = (list, score) => (list.length ? list : buildings).reduce((best, b) => (score(b) < score(best) ? b : best));
-  const plain = buildings.filter((b) => b !== tower && b.H > 1.4);
-  const B1 = pick(plain, (b) => b.slot);
-  const B2 = pick(plain.filter((b) => b.cz > 2 && Math.abs(b.cx) < 13), (b) => Math.abs(b.slot - 0.5));
-  const B3 = pick(plain.filter((b) => b.cz < -3 && Math.abs(b.cx) < 14), (b) => -b.slot);
-  const B4 = pick(plain.filter((b) => b.cz > 3 && Math.abs(b.cx) < 12), (b) => Math.abs(b.slotM - 0.42));
-  const cam = { vp: null, eye: [0, 40, 40], right: [1, 0, 0], fwd: [0, -1, 0], sun: [0, 0.1, -1], rect: { left: 0, top: 0, width: 1, height: 1 } };
-  function project(p) {
-    const m = cam.vp;
-    if (!m) return null;
-    const x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
-    const w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
-    if (w < 0.2) return null;
-    const r = cam.rect, sx = r.left + (x / w * 0.5 + 0.5) * r.width, sy = r.top + (0.5 - y / w * 0.5) * r.height;
-    return sx < -30 || sy < -30 || sx > r.left + r.width + 30 || sy > r.top + r.height + 30 ? null : { x: sx, y: sy };
-  }
-  const roof = (b) => () => project([b.cx, heightNow(b, build) + 0.04, b.cz]);
-  const facade = (b) => () => {   // the corner nearest the camera, where the cladding front is
-    const sx = Math.sign(cam.eye[0] - b.cx) || 1, sz = Math.sign(cam.eye[2] - b.cz) || 1;
-    return project([b.cx + sx * b.w * 0.5, Math.max(0.2, cladNow(b, build) - 0.05), b.cz + sz * b.d * 0.5]);
-  };
-  const front = (radius, turn, side, cap) => () => {  // a point on an expanding front, off to one side of the view
-    const v = norm([side * cam.right[0] + cam.fwd[0] * turn, 0, side * cam.right[2] + cam.fwd[2] * turn]);
-    const r = Math.min(radius(build), cap);
-    return project([v[0] * r, 0.02, v[2] * r]);
-  };
-  const lampX = -0.5 * PITCH + 0.65, lampZ = 1.5 * PITCH - 0.65;
-  const sites = [
-    ['plaza', 'surveyor', 0.0, 0.5, 'staking out the plaza', () => project([0, 0.05, 0])],
-    ['survey', 'surveyor', 0.13, 1.0, 'surveying the street grid', front(surveyR, 0.25, -1, 21)],
-    ['footing', 'mason', 0.06, 0.8, 'pouring the first block', roof(B1)],
-    ['tower', 'steelworker', 0.11, 1.7, 'topping out the tower', roof(tower)],
-    ['midrise', 'mason', 0.24, 0.8, 'raising the next blocks', roof(B2)],
-    ['outskirts', 'steelworker', 0.40, 0.7, 'framing the outer blocks', roof(B3)],
-    ['glass', 'glazier', 0.47, 0.9, 'glazing the tower', facade(tower)],
-    ['paving', 'mason', 0.52, 0.8, 'paving the streets', front(paveR, -0.2, 1, 15)],
-    ['park', 'gardener', 0.55, 1.1, 'planting the park', () => project([parkAt[0][0], 0.45, parkAt[0][1]])],
-    ['facades', 'glazier', 0.62, 0.7, 'cladding the facades', facade(B4)],
-    ['lamps', 'electrician', 0.80, 0.6, 'switching on the street lamps', () => project([lampX, 0.3, lampZ])],
-    ['sun', 'renderer', 0.95, 1.0, 'setting the sun', () => project(cam.eye.map((v, i) => v + cam.sun[i] * 300))],
-    ['beacon', 'electrician', 0.94, 0.7, 'lighting up the tower', () => project([tower.cx, tower.H + 0.12, tower.cz])],
-  ];
-  sites.forEach(([name, by, p, hold, say, fn]) => swarm.anchor(name, fn, { at: p, by, hold, say, label: false }));
-
-  // ------------------------------------------------------------------ WebGL
-  const gl = canvas.getContext('webgl', { antialias: true, alpha: false, powerPreference: 'high-performance' });
-  swarm.start();
-  if (!gl) { swarm.ready(canvas); throw new Error('[city] WebGL is not available'); }
-  const deriv = gl.getExtension('OES_standard_derivatives');
-  const FS_HEAD = (deriv ? '#extension GL_OES_standard_derivatives : enable\n#define DERIV 1\n' : '') +
-    '#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n';
-  // fragment-only uniforms; no uniform is shared with a vertex shader, so precisions never clash
-  const COMMON = `
-    uniform vec2 uRes;
-    uniform vec3 uHzn, uHznSun, uZen, uSunDir, uSunCol, uSkyAmb, uGndAmb, uEye;
-    uniform float uGlow, uFogS, uFogK, uPxW;
-    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
-    float sunward(vec3 d) { vec2 h = normalize(d.xz + vec2(1e-5)), s = normalize(uSunDir.xz + vec2(1e-5)); return max(dot(h, s), 0.0); }
-    // the colour of the air at the horizon in direction d: used by the sky, and as fog by everything else
-    vec3 haze(vec3 d) {
-      float sd = max(dot(normalize(d), uSunDir), 0.0);
-      vec3 c = mix(uHzn, uHznSun, pow(sunward(d), 6.0));
-      return c + uSunCol * uGlow * (pow(sd, 12.0) * 0.22 + pow(sd, 90.0) * 0.45);
-    }
-    vec3 fogged(vec3 col, vec3 wp) {
-      vec3 d = wp - uEye;
-      float f = 1.0 - exp(-pow(max(length(d) - uFogS, 0.0) * uFogK, 1.35));
-      return mix(col, haze(d), clamp(f, 0.0, 1.0));
-    }
-    float vig() { vec2 q = gl_FragCoord.xy / uRes - 0.5; q.x *= uRes.x / uRes.y; return mix(0.7, 1.0, smoothstep(1.0, 0.22, length(q))); }
-    float pxw(float dist) { return max(uPxW * dist, 1e-4); }
-  `;
-
-  const SKY_VS = `attribute vec2 aQ; varying vec2 vQ; void main() { vQ = aQ; gl_Position = vec4(aQ, 0.9999, 1.0); }`;
-  const SKY_FS = FS_HEAD + COMMON + `
-    varying vec2 vQ;
-    uniform vec3 uR, uU, uF, uMid, uMidSun; uniform vec2 uTan; uniform float uStars;
-    void main() {
-      vec3 d = normalize(uF + vQ.x * uTan.x * uR + vQ.y * uTan.y * uU);
-      // horizon haze → a band a few degrees up → the zenith
-      vec3 mid = mix(uMid, uMidSun, pow(sunward(d), 4.0));
-      vec3 col = d.y < 0.1 ? mix(haze(d), mid, smoothstep(0.0, 0.1, d.y)) : mix(mid, uZen, smoothstep(0.1, 0.45, d.y));
-      float sd = max(dot(d, uSunDir), 0.0);
-      col += uSunCol * uGlow * smoothstep(0.0, 0.02, d.y) * smoothstep(0.99991, 0.99996, sd) * 1.2;   // the disc, cut by the horizon
-      if (d.y > 0.04) {
-        vec2 p = d.xz / (d.y + 0.35) * 70.0, c = floor(p), f = fract(p) - 0.5;
-        vec2 o = vec2(hash(c + 7.1), hash(c + 3.7)) - 0.5;
-        float s = step(0.985, hash(c)) * smoothstep(0.1, 0.0, length(f - o * 0.6));
-        col += vec3(0.85, 0.9, 1.0) * s * uStars * smoothstep(0.06, 0.4, d.y) * (0.35 + 0.65 * hash(c + 1.3));
-      }
-      if (d.y < 0.0) col = haze(d);
-      gl_FragColor = vec4(col * vig(), 1.0);
-    }`;
-
-  const GROUND_VS = `attribute vec2 aQ; uniform mat4 uVP; varying vec3 vW;
-    void main() { vW = vec3(aQ.x * 320.0, 0.0, aQ.y * 320.0); gl_Position = uVP * vec4(vW, 1.0); }`;
-  const GROUND_FS = FS_HEAD + COMMON + `
-    varying vec3 vW;
-    uniform float uSurvey, uPave, uLit;
-    uniform vec4 uParks;
-    const float P = ${PITCH.toFixed(2)}, BH = ${(BLOCK / 2).toFixed(2)}, WALK = ${WALK.toFixed(2)}, CITY = ${(4.5 * PITCH).toFixed(3)};
-    float ln(float d, float w) { return 1.0 - smoothstep(w * 0.5, w * 1.5, d); }
-    void main() {
-      vec2 w = vW.xz;
-      float dist = length(uEye - vW), pw = pxw(dist);
-    #ifdef DERIV
-      pw = max(pw, max(fwidth(w.x), fwidth(w.y)));
-    #endif
-      vec2 gi = floor(w / P + 0.5), l = w - gi * P, al = abs(l);
-      float inside = step(max(abs(gi.x), abs(gi.y)), 4.0);
-      float inCity = step(max(abs(w.x), abs(w.y)), CITY);
-      float isBlock = inside * step(al.x, BH) * step(al.y, BH);
-      float isRoad = inCity * (1.0 - isBlock);
-      float ds = length(w);
-
-      // the survey: a blueprint grid that spreads out from the plaza
-      vec3 bp = vec3(0.03, 0.072, 0.135);
-      float sv = step(ds, uSurvey);
-      vec2 fg = abs(fract(w + 0.5) - 0.5);
-      float fine = max(ln(fg.x, pw), ln(fg.y, pw)) * 0.1;
-      float outline = ln(abs(max(al.x, al.y) - BH), pw * 1.3) * inside;
-      float centre = (ln(abs(P * 0.5 - al.y), pw) * step(al.x, BH) * step(0.5, fract(w.x / 0.9))
-                    + ln(abs(P * 0.5 - al.x), pw) * step(al.y, BH) * step(0.5, fract(w.y / 0.9))) * inCity;
-      bp += vec3(0.3, 0.62, 0.86) * (fine * smoothstep(uSurvey, uSurvey - 5.0, ds) + (outline * 0.85 + centre * 0.35) * inCity * sv);
-      bp += vec3(0.3, 0.86, 1.0) * exp(-abs(ds - uSurvey) * 1.6) * 0.55 * step(0.01, uSurvey) * step(uSurvey, 30.5);
-
-      // the finished ground: asphalt, kerbs and pavements, markings, parks, the plaza, fields beyond
-      vec3 alb = vec3(0.105, 0.11, 0.105) + 0.025 * (hash(floor(w / 6.0)) - 0.5);
-      if (isRoad > 0.5) {
-        alb = vec3(0.12, 0.125, 0.14);
-        float m = max(pw, 0.03);
-        float lane = step(al.x, BH) * ln(abs(P * 0.5 - al.y), m) * step(0.45, fract(w.x / 0.7))
-                   + step(al.y, BH) * ln(abs(P * 0.5 - al.x), m) * step(0.45, fract(w.y / 0.7));
-        float bx = step(BH + 0.04, al.x) * step(al.x, BH + 0.3), bz = step(BH + 0.04, al.y) * step(al.y, BH + 0.3);
-        float zebra = bx * step(BH, al.y) * (1.0 - bz) * step(0.5, fract(w.y / 0.12)) + bz * step(BH, al.x) * step(0.5, fract(w.x / 0.12));
-        alb += vec3(0.62, 0.52, 0.26) * lane * 0.6 + vec3(0.42) * zebra * 0.55;
-      } else if (isBlock > 0.5) {
-        float e = max(al.x, al.y);
-        vec2 b = gi + 4.0;
-        if (step(BH - WALK, e) > 0.5) alb = vec3(0.33, 0.335, 0.35) * (1.0 - 0.35 * ln(abs(e - BH), max(pw, 0.025)));
-        else if (b == vec2(${PLAZA[0]}.0, ${PLAZA[1]}.0)) {
-          vec2 t = abs(fract(w / 0.4 + 0.5) - 0.5) * 0.4;
-          float r = length(l);
-          alb = vec3(0.56, 0.53, 0.48) * (1.0 - 0.18 * max(ln(t.x, max(pw, 0.012)), ln(t.y, max(pw, 0.012))));
-          alb = mix(alb, vec3(0.42, 0.40, 0.37), ln(abs(r - 0.92), max(pw, 0.05)) + ln(abs(r - 1.38), max(pw, 0.04)));
-        } else if (b == uParks.xy || b == uParks.zw) {
-          float r = length(l);
-          alb = vec3(0.17, 0.29, 0.15) * (0.85 + 0.3 * hash(floor(w * 3.0)));
-          float path = max(max(ln(abs(l.x - l.y), max(pw, 0.12)), ln(abs(l.x + l.y), max(pw, 0.12))), ln(abs(r - 0.8), max(pw, 0.1)));
-          alb = mix(alb, vec3(0.46, 0.43, 0.38), path);
-        } else alb = vec3(0.16, 0.16, 0.17);
-      }
-      vec3 col = alb * (uSkyAmb + uSunCol * max(uSunDir.y, 0.0));
-      // street lamps at the corners of each crossing, switched on in a wave from the centre
-      vec2 ic = (floor(w / P) + 0.5) * P, q = abs(w - ic) - 0.65;
-      float th = 0.55 * clamp(length(ic) / 26.0, 0.0, 1.0);
-      float on = smoothstep(th, th + 0.08, uLit) * step(max(abs(ic.x), abs(ic.y)), CITY);
-      col += vec3(1.0, 0.58, 0.26) * exp(-dot(q, q) / 0.12) * on * 0.42;
-
-      float pv = step(ds, uPave);
-      col = mix(bp, col, pv);
-      col += vec3(1.0, 0.86, 0.62) * exp(-abs(ds - uPave) * 7.0) * 0.55 * step(0.01, uPave) * step(uPave, 30.5);
-      gl_FragColor = vec4(fogged(col, vW) * vig(), 1.0);
-    }`;
-
-  const CITY_VS = `
-    attribute vec3 aPos, aNrm; attribute vec4 aBox, aDim, aMat; attribute vec3 aClad;
-    uniform mat4 uVP; uniform float uGeo, uMat;
-    varying vec3 vW, vN, vC; varying vec4 vF, vInfo;
-    void main() {
-      float kind = aMat.z, H = aMat.w, y0 = aBox.y, h = aDim.y;
-      float r = clamp((uGeo - aBox.w) / aDim.w, 0.0, 1.0); r = r * r * (3.0 - 2.0 * r);
-      float c = clamp((uMat - aClad.x) / aClad.y, 0.0, 1.0);
-      float vis = 1.0, hh = h;
-      vec3 p = aPos;
-      if (kind > 0.5 && kind < 2.5) {                   // trees grow with the materials wave
-        float g = c * c * (3.0 - 2.0 * c);
-        vis = step(0.001, g); hh = h * g;
-        vW = vec3(aBox.x, 0.0, aBox.z) + vec3(p.x * aDim.x, y0 + p.y * h, p.z * aDim.z) * g;
-      } else if (kind > 3.5 && kind < 4.5) {            // roof kit pops up once the cladding reaches the roof
-        float g = smoothstep(0.85, 1.0, c);
-        vis = step(0.001, g); hh = h * g;
-        vW = vec3(aBox.x + p.x * aDim.x * g, y0 + p.y * hh, aBox.z + p.z * aDim.z * g);
-      } else {                                          // tiers rise with the geometry wave, floor by floor
-        float cur = r * H, top = clamp(cur, y0, y0 + h);
-        vis = step(y0 + 0.002, cur); hh = top - y0;
-        float t = mix(1.0, aClad.z, p.y * hh / max(h, 1e-3));
-        vW = vec3(aBox.x + p.x * aDim.x * t, y0 + p.y * hh, aBox.z + p.z * aDim.z * t);
-      }
-      vN = aNrm;
-      if (abs(aNrm.y) > 0.5) vF = vec4((p.x + 0.5) * aDim.x, (p.z + 0.5) * aDim.z, aDim.x, aDim.z);
-      else if (abs(aNrm.x) > 0.5) vF = vec4((p.z + 0.5) * aDim.z, p.y * hh, aDim.z, hh);
-      else vF = vec4((p.x + 0.5) * aDim.x, p.y * hh, aDim.x, hh);
-      vInfo = aMat;
-      vC = vec3(c * H, c, r);
-      gl_Position = vis > 0.5 ? uVP * vec4(vW, 1.0) : vec4(2.0, 2.0, 2.0, 1.0);
-    }`;
-  const CITY_FS = FS_HEAD + COMMON + `
-    varying vec3 vW, vN, vC; varying vec4 vF, vInfo;
-    uniform vec3 uSkyRefl; uniform float uLit, uLamp;
-    vec3 pick5(float s, vec3 a, vec3 b, vec3 c, vec3 d, vec3 e) { float k = floor(fract(s) * 5.0); return k < 1.0 ? a : k < 2.0 ? b : k < 3.0 ? c : k < 4.0 ? d : e; }
-    float boxAA(float x, float a, float b, float w) { return smoothstep(a - w, a + w, x) - smoothstep(b - w, b + w, x); }
-    void main() {
-      float type = vInfo.x, seed = vInfo.y, kind = vInfo.z, H = vInfo.w;
-      vec3 N = normalize(vN);
-      vec3 toEye = uEye - vW; float dist = length(toEye); vec3 V = toEye / dist;
-      float pw = pxw(dist);
-    #ifdef DERIV
-      pw = max(pw, max(fwidth(vF.x), fwidth(vF.y)));
-    #endif
-      bool side = abs(N.y) < 0.5;
-      bool arch = kind < 0.5 || (kind > 2.5 && kind < 3.5) || kind > 4.5;
-
-      // blueprint: navy massing, bright edges and floor plates, a glowing cap while it extrudes
-      float e = min(min(vF.x, vF.z - vF.x), min(vF.y, vF.w - vF.y));
-      float edge = 1.0 - smoothstep(pw * 0.5, pw * 1.6, e);
-      float fl = side ? 1.0 - smoothstep(pw * 0.3, pw * 1.2, abs(fract(vW.y / 0.3 + 0.5) - 0.5) * 0.3) : 0.0;
-      vec3 bp = mix(vec3(0.035, 0.085, 0.16), vec3(0.07, 0.16, 0.29), 0.5 + 0.5 * N.y);
-      bp += vec3(0.52, 0.8, 1.0) * (edge * 0.95 + fl * 0.16);
-      if (N.y > 0.5 && vC.z < 0.999) bp += vec3(0.2, 0.55, 0.95) * 0.45;
-      float bpW = arch ? step(vC.x + 1e-4, vW.y) : 0.0;
-
-      // finished materials
-      vec3 alb = vec3(0.5); float gloss = 0.05; vec3 emit = vec3(0.0);
-      if (kind < 0.5) {
-        vec3 wall = type < 0.5 ? vec3(0.16, 0.19, 0.24)
-          : type < 1.5 ? pick5(seed, vec3(0.70, 0.62, 0.52), vec3(0.55, 0.33, 0.26), vec3(0.58, 0.59, 0.60), vec3(0.76, 0.72, 0.65), vec3(0.42, 0.44, 0.48))
-          : pick5(seed * 1.7, vec3(0.84, 0.77, 0.64), vec3(0.78, 0.58, 0.47), vec3(0.66, 0.70, 0.62), vec3(0.82, 0.80, 0.75), vec3(0.74, 0.66, 0.58));
-        if (!side) alb = type < 0.5 ? vec3(0.22, 0.24, 0.27) : wall * 0.55 + 0.04;
-        else {
-          float fh = type < 0.5 ? 0.26 : (type < 1.5 ? 0.3 : 0.32);
-          float cw = type < 0.5 ? 0.2 : (type < 1.5 ? 0.25 : 0.3);
-          float n = max(1.0, floor(vF.z / cw)), uu = vF.x - (vF.z - n * cw) * 0.5;
-          float cx = uu / cw, cy = vW.y / fh;
-          vec2 cell = vec2(floor(cx), floor(cy)), f = vec2(fract(cx), fract(cy));
-          float y0 = vW.y - vF.y, yt = y0 + vF.w;
-          float ok = step(0.0, uu) * step(uu, n * cw) * step(y0 - 0.02, cell.y * fh) * step((cell.y + 1.0) * fh, yt + 0.02);
-          bool shop = cell.y < 0.5;
-          vec4 r = shop ? vec4(0.06, 0.94, 0.08, 0.74) : type < 0.5 ? vec4(0.06, 0.94, 0.12, 0.96) : type < 1.5 ? vec4(0.2, 0.8, 0.26, 0.84) : vec4(0.27, 0.73, 0.3, 0.8);
-          float ax = pw / cw, ay = pw / fh;
-          float win = boxAA(f.x, r.x, r.y, ax) * boxAA(f.y, r.z, r.w, ay);
-          win = ok * mix(win, (r.y - r.x) * (r.w - r.z), smoothstep(0.22, 0.6, max(ax, ay)));   // no moiré far away
-          vec2 hc = cell + vec2(seed * 97.3, dot(N.xz, vec2(17.1, 31.7)));
-          float hid = hash(hc), hon = hash(hc.yx * 1.31 + 4.7), tone = hash(hc * 0.73 + 9.1);
-          // offices light up floor by floor; homes window by window
-          float busy = step(hash(vec2(cell.y * 1.7, seed * 31.1 + dot(N.xz, vec2(3.0, 5.0)))), type < 0.5 ? 0.55 : 0.5);
-          float litP = shop ? 0.85 : type < 0.5 ? mix(0.08, 0.9, busy) : mix(0.3, 0.7, busy);
-          float on = step(hid, litP) * smoothstep(hon * 0.8, hon * 0.8 + 0.15, uLit);
-          vec3 warm = tone > 0.93 ? vec3(0.55, 0.72, 1.0) : mix(vec3(1.0, 0.7, 0.36), vec3(1.0, 0.88, 0.66), tone);
-          vec3 glass = mix(vec3(0.05, 0.07, 0.11), uSkyRefl, 0.18 + 0.5 * clamp(vW.y / max(H, 1.0), 0.0, 1.0));
-          alb = mix(wall, glass, win);
-          gloss = mix(type < 0.5 ? 0.35 : 0.04, 0.85, win);
-          emit = warm * on * win * (shop ? 1.4 : 1.1);
-        }
-      } else if (kind < 1.5) alb = pick5(seed, vec3(0.20, 0.36, 0.18), vec3(0.26, 0.42, 0.2), vec3(0.16, 0.31, 0.2), vec3(0.3, 0.4, 0.17), vec3(0.22, 0.38, 0.24));
-      else if (kind < 2.5) alb = vec3(0.3, 0.22, 0.16);
-      else if (kind < 3.5) alb = vec3(0.8, 0.76, 0.68);
-      else if (kind < 4.5) alb = mix(vec3(0.38, 0.39, 0.41), vec3(0.55, 0.56, 0.57), fract(seed * 7.3));
-      else if (kind < 5.5) { alb = vec3(0.62, 0.66, 0.72); gloss = 0.7; }
-      else { alb = vec3(0.85, 0.66, 0.32); gloss = 0.8; }
-
-      vec3 amb = mix(uGndAmb, uSkyAmb, 0.5 + 0.5 * N.y);
-      vec3 col = alb * (amb + uSunCol * max(dot(N, uSunDir), 0.0));
-      col += uSkyRefl * pow(1.0 - max(dot(N, V), 0.0), 4.0) * gloss * 0.6;
-      col += uSunCol * pow(max(dot(reflect(-uSunDir, N), V), 0.0), 48.0) * gloss * 1.5;
-      if (arch) col *= mix(0.5, 1.0, smoothstep(0.0, 0.9, vW.y));
-      if (side) col += vec3(1.0, 0.6, 0.3) * uLamp * 0.2 * exp(-vW.y * 3.0);
-      col += emit;
-      float seam = side ? (1.0 - smoothstep(0.0, 0.09, vC.x - vW.y)) * step(vW.y, vC.x) * step(vC.y, 0.999) : 0.0;
-      col += vec3(1.0, 0.86, 0.62) * seam * 1.1;
-      col = mix(col, bp, bpW);
-      gl_FragColor = vec4(fogged(col, vW) * vig(), 1.0);
-    }`;
-
-  const POINT_VS = `
-    attribute vec4 aP, aC;
-    uniform mat4 uVP; uniform vec3 uEyeP; uniform float uPx, uLitP, uFogSP, uFogKP;
-    varying vec3 vC;
-    void main() {
-      vec4 c = uVP * vec4(aP.xyz, 1.0);
-      gl_Position = c;
-      float on = aP.w < 0.0 ? 1.0 : smoothstep(aP.w, aP.w + 0.06, uLitP);
-      float fog = exp(-pow(max(length(aP.xyz - uEyeP) - uFogSP, 0.0) * uFogKP, 1.35));
-      vC = aC.rgb * on * fog;
-      gl_PointSize = on > 0.001 ? clamp(aC.a * uPx / max(c.w, 0.1), 1.0, 40.0) : 0.0;
-    }`;
-  const POINT_FS = FS_HEAD + `
-    varying vec3 vC;
-    void main() {
-      float r = length(gl_PointCoord - 0.5) * 2.0;
-      float a = exp(-r * r * 5.0) * 0.75 + smoothstep(0.4, 0.0, r) * 0.6;
-      if (a < 0.01) discard;
-      gl_FragColor = vec4(vC * a, 1.0);
-    }`;
-
-  function program(vs, fs) {
-    const p = gl.createProgram();
-    for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
-      const s = gl.createShader(type);
-      gl.shaderSource(s, src); gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('[city] ' + gl.getShaderInfoLog(s));
-      gl.attachShader(p, s);
-    }
-    gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('[city] ' + gl.getProgramInfoLog(p));
-    const locs = {};
-    return {
-      p,
-      a: (n) => gl.getAttribLocation(p, n),
-      u(name, v) {
-        if (!(name in locs)) locs[name] = gl.getUniformLocation(p, name);
-        const l = locs[name];
-        if (!l) return;
-        if (typeof v === 'number') gl.uniform1f(l, v);
-        else if (v.length === 2) gl.uniform2fv(l, v);
-        else if (v.length === 3) gl.uniform3fv(l, v);
-        else if (v.length === 4) gl.uniform4fv(l, v);
-        else gl.uniformMatrix4fv(l, false, v);
-      },
-    };
-  }
-
-  // ------------------------------------------------------------------ meshes
-  const CUBE = [];
-  [[[1, 0, 0], [[0.5, 0, -0.5], [0.5, 1, -0.5], [0.5, 1, 0.5], [0.5, 0, 0.5]]],
-   [[-1, 0, 0], [[-0.5, 0, 0.5], [-0.5, 1, 0.5], [-0.5, 1, -0.5], [-0.5, 0, -0.5]]],
-   [[0, 1, 0], [[-0.5, 1, -0.5], [-0.5, 1, 0.5], [0.5, 1, 0.5], [0.5, 1, -0.5]]],
-   [[0, -1, 0], [[-0.5, 0, 0.5], [-0.5, 0, -0.5], [0.5, 0, -0.5], [0.5, 0, 0.5]]],
-   [[0, 0, 1], [[0.5, 0, 0.5], [0.5, 1, 0.5], [-0.5, 1, 0.5], [-0.5, 0, 0.5]]],
-   [[0, 0, -1], [[-0.5, 0, -0.5], [-0.5, 1, -0.5], [0.5, 1, -0.5], [0.5, 0, -0.5]]],
-  ].forEach(([n, q]) => [0, 1, 2, 0, 2, 3].forEach((k) => CUBE.push([...q[k], ...n])));
-  const ICO = [];
+  // sixty jobs spread evenly over the journey; each goes to whoever has been idle longest
   {
-    const t = (1 + Math.sqrt(5)) / 2;
-    const v = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(norm);
-    [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
-     [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]].forEach((f) => {
-      const [a, b, c] = f.map((i) => v[i]);
-      let n = norm(cross(sub(b, a), sub(c, a)));
-      if (dot(n, [a[0] + b[0] + c[0], a[1] + b[1] + c[1], a[2] + b[2] + c[2]]) < 0) n = n.map((x) => -x);
-      [a, b, c].forEach((p) => ICO.push([p[0] * 0.5, p[1] * 0.5 + 0.5, p[2] * 0.5, ...n]));
+    const pool = clusters.filter((c) => BY[c.label]).sort((a, b) => a.b0 - b.b0), last = { conductor: 0.004 };
+    const chosen = [{ label: 'Train', b0: 0.004, by: 'conductor', train: true }];
+    const SLOTS = 60, T1 = 0.93;
+    for (let k = 0; k < SLOTS; k++) {
+      const w0 = (k * T1) / SLOTS, w1 = ((k + 1) * T1) / SLOTS;
+      let best = null, idle = -1;
+      for (const c of pool) {
+        if (c.used || c.b0 < w0 - 0.01 || c.b0 >= w1) continue;
+        for (const by of BY[c.label]) { const d = c.b0 - (last[by] ?? -1); if (d >= 0.035 && d > idle) { idle = d; best = { c, by }; } }
+      }
+      if (best) { best.c.used = true; last[best.by] = best.c.b0; chosen.push({ ...best.c, by: best.by }); }
+    }
+    chosen.forEach((c, i) => {
+      const fn = c.train ? () => project(loco.position.toArray().map((v, k) => v + (k === 1 ? 1.6 : 0))) : () => centre(c, build);
+      swarm.anchor('site-' + i, fn, { at: Math.max(0, c.b0 - 0.012), by: c.by, hold: 0.9, label: false, say: 'building ' + c.label.toLowerCase() });
     });
   }
-  const V = [];
-  // pos3 nrm3 | box: cx y0 cz slot | dim: w h d riseD | mat: type seed kind H | clad: slotM cladD taper
-  const put = (mesh, box, dim, mat, clad) => { for (const m of mesh) V.push(...m, ...box, ...dim, ...mat, ...clad); };
-  for (const b of buildings) {
-    for (const [f0, f1, s, kind = 0] of b.tiers) {
-      put(CUBE, [b.cx, f0 * b.H, b.cz, b.slot], [b.w * s, (f1 - f0) * b.H, b.d * s, b.riseD], [b.type, b.seed, kind, b.H], [b.slotM, 0.28, 1]);
-    }
-  }
-  for (const k of kit) put(CUBE, [k.x, k.b.H, k.z, k.b.slot], [k.w, k.h, k.d, k.b.riseD], [1, rnd(), 4, k.b.H], [k.b.slotM, 0.28, 1]);
-  for (const t of trees) {
-    put(CUBE, [t.x, 0, t.z, 0], [0.06, t.trunk + 0.08, 0.06, 1], [0, t.seed, 2, 1], [t.slotM, 0.22, 1]);
-    put(ICO, [t.x, t.trunk, t.z, 0], [t.dia, t.h, t.dia, 1], [0, t.seed, 1, 1], [t.slotM, 0.22, 1]);
-  }
-  {
-    const m = monument;
-    const mk = (y0, w, h, kind, taper) => put(CUBE, [m.cx, y0, m.cz, m.slot], [w, h, w, m.riseD], [1, m.seed, kind, m.H], [m.slotM, 0.3, taper]);
-    mk(0, 1.1, 0.35, 3, 1); mk(0.35, 0.34, 2.6, 3, 0.62); mk(2.95, 0.34 * 0.62, 0.28, 6, 0);
-  }
-  const cityBuf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, cityBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(V), gl.STATIC_DRAW);
-  const cityCount = V.length / 21;
-  const quadBuf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-
-  // street lamps (static) and traffic, the tower beacon and the obelisk's uplights (rebuilt each frame)
-  const lamps = [];
-  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
-    const x = (i - MID - 0.5) * PITCH, z = (j - MID - 0.5) * PITCH, th = lampAt(x, z);
-    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) lamps.push(x + sx * 0.65, 0.3, z + sz * 0.65, th, 1.0, 0.7, 0.42, 0.15);
-  }
-  const lampBuf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, lampBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(lamps), gl.STATIC_DRAW);
-  const L = 4.5 * PITCH + 1.5, cars = [];
-  for (let k = 0; k <= N; k++) {
-    const r = (k - MID - 0.5) * PITCH;
-    for (const axis of [0, 1]) for (const dir of [1, -1]) {
-      const n = 2 + Math.floor(rnd() * 3);
-      for (let c = 0; c < n; c++) cars.push({ axis, dir, lane: r + dir * 0.27 * (axis ? -1 : 1), s: (rnd() * 2 - 1) * L, v: 1.0 + rnd() * 1.1 });
-    }
-  }
-  const dyn = new Float32Array((cars.length + 5) * 8);
-  const dynBuf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, dynBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, dyn.byteLength, gl.DYNAMIC_DRAW);
-
-  const sky = program(SKY_VS, SKY_FS), ground = program(GROUND_VS, GROUND_FS), city = program(CITY_VS, CITY_FS), points = program(POINT_VS, POINT_FS);
-  const maxAttr = gl.getParameter(gl.MAX_VERTEX_ATTRIBS);
-  function attribs(prog, buf, layout, stride) {
-    for (let i = 0; i < maxAttr; i++) gl.disableVertexAttribArray(i);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    let off = 0;
-    for (const [name, size] of layout) {
-      const loc = prog.a(name);
-      if (loc >= 0) { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, off); }
-      off += size * 4;
-    }
-  }
-
-  // ------------------------------------------------------------------ light and camera through the build
-  // three skies: the blueprint night, a golden afternoon for the materials, dusk for the lights
-  const ENV = {
-    plan: { zen: [0.02, 0.05, 0.1], mid: [0.03, 0.075, 0.15], midSun: [0.03, 0.075, 0.15], hzn: [0.04, 0.1, 0.19], sunH: [0.04, 0.1, 0.19],
-            sun: [0, 0, 0], sky: [0.05, 0.09, 0.16], gnd: [0.02, 0.04, 0.08], glow: 0, el: 0.5, stars: 0, az: 0.95 },
-    day: { zen: [0.22, 0.38, 0.62], mid: [0.47, 0.58, 0.74], midSun: [0.84, 0.78, 0.68], hzn: [0.82, 0.79, 0.74], sunH: [0.98, 0.86, 0.66],
-           sun: [0.95, 0.84, 0.68], sky: [0.5, 0.57, 0.7], gnd: [0.32, 0.28, 0.24], glow: 0.45, el: 0.5, stars: 0, az: 0.95 },
-    dusk: { zen: [0.04, 0.05, 0.14], mid: [0.24, 0.18, 0.34], midSun: [0.66, 0.33, 0.3], hzn: [0.38, 0.26, 0.39], sunH: [1.0, 0.56, 0.28],
-            sun: [0.95, 0.46, 0.22], sky: [0.25, 0.27, 0.47], gnd: [0.12, 0.08, 0.1], glow: 1.0, el: 0.016, stars: 1, az: Math.PI - 0.16 },
-  };
-  const AZ = 0.42;
-  function env(p) {
-    const k1 = span(p, 0.4, 0.56), k2 = span(p, 0.78, 1.0), o = {};
-    for (const key of Object.keys(ENV.plan)) o[key] = mix(mix(ENV.plan[key], ENV.day[key], k1), ENV.dusk[key], k2);
-    // the sun swings round from behind the camera to set in front of it (beside the spire on a narrow screen)
-    const az = AZ + o.az + (cssW / cssH < 0.9 ? -0.09 : 0) * span(p, 0.78, 1.0);
-    o.dir = [Math.sin(az) * Math.cos(o.el), Math.sin(o.el), Math.cos(az) * Math.cos(o.el)];
-    return o;
-  }
-  function camera(p, t, w, h) {
-    const aspect = w / h, portrait = aspect < 0.9;
-    const fov = (portrait ? 46 : aspect < 1.3 ? 38 : 32) * Math.PI / 180;
-    const half = Math.min(fov / 2, Math.atan(Math.tan(fov / 2) * aspect));
-    const q = span(p, 0.15, 1.0), settle = span(p, 0.9, 1.0);
-    const D = (portrait ? 11.5 : 16.5) / Math.sin(half) * mix(1.1, 0.85, sm(cl(p)));
-    const pitch = mix(1.0, portrait ? 0.24 : 0.18, q);
-    const az = AZ + mix(-0.8, 0, sm(cl(p))) + (reduce ? 0 : 0.17 * Math.sin(t * 0.05)) * settle;
-    const target = [0, mix(0, 1.9, q), -mix(0, 1.5, q)];
-    const eye = [target[0] + Math.sin(az) * Math.cos(pitch) * D, target[1] + Math.sin(pitch) * D, target[2] + Math.cos(az) * Math.cos(pitch) * D];
-    const f = norm(sub(target, eye)), r = norm(cross(f, [0, 1, 0])), u = cross(r, f);
-    const view = [r[0], u[0], -f[0], 0, r[1], u[1], -f[1], 0, r[2], u[2], -f[2], 0, -dot(r, eye), -dot(u, eye), dot(f, eye), 1];
-    const near = 0.5, far = 800, fy = 1 / Math.tan(fov / 2), nf = 1 / (near - far);
-    const proj = [fy / aspect, 0, 0, 0, 0, fy, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0];
-    const vp = new Array(16);
-    for (let c = 0; c < 4; c++) for (let rr = 0; rr < 4; rr++) {
-      let s = 0;
-      for (let k = 0; k < 4; k++) s += proj[k * 4 + rr] * view[c * 4 + k];
-      vp[c * 4 + rr] = s;
-    }
-    return { vp, eye, f, r, u, fov, aspect, D };
-  }
+  swarm.start();
 
   // ------------------------------------------------------------------ render
-  let W = 0, Hh = 0, cssW = 1, cssH = 1;
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2), rect = canvas.getBoundingClientRect();
-    cssW = Math.max(1, rect.width); cssH = Math.max(1, rect.height);
-    cam.rect = { left: rect.left, top: rect.top, width: cssW, height: cssH };
-    W = Math.round(cssW * dpr); Hh = Math.round(cssH * dpr);
-    if (canvas.width !== W || canvas.height !== Hh) { canvas.width = W; canvas.height = Hh; }
-    dirty = true;
+    const r = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, r.width < 700 ? 1.6 : 2);
+    gl.setPixelRatio(dpr); gl.setSize(r.width, r.height, false);
+    camera.aspect = r.width / Math.max(1, r.height);
+    camera.updateProjectionMatrix();
   }
   addEventListener('resize', resize);
   resize();
 
+  const tmpQ = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  function place(obj, s) {
+    const a = pathAt(s), b = pathAt(s + 0.8), c = pathAt(s - 0.8);
+    obj.position.set(a.p[0], a.p[1] + 0.13, a.p[2]);
+    obj.lookAt(b.p[0], b.p[1] + 0.13, b.p[2]);
+  }
   function render(p, t) {
-    const E = env(p), C = camera(p, t, cssW, cssH);
-    Object.assign(cam, { vp: C.vp, eye: C.eye, right: C.r, fwd: C.f, sun: E.dir });
-    const g = geoOf(p), m = matOf(p), l = litOf(p);
-    const skyRefl = mix(E.hzn, E.zen, 0.4);
-    const fogS = C.D * 0.9, fogK = 1 / 55, pxW = 2 * Math.tan(C.fov / 2) / Hh;
-    gl.viewport(0, 0, W, Hh);
-    gl.clearColor(E.hzn[0], E.hzn[1], E.hzn[2], 1);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    const shared = (prog) => {
-      prog.u('uRes', [W, Hh]); prog.u('uHzn', E.hzn); prog.u('uHznSun', E.sunH); prog.u('uZen', E.zen);
-      prog.u('uSunDir', E.dir); prog.u('uSunCol', E.sun); prog.u('uSkyAmb', E.sky); prog.u('uGndAmb', E.gnd);
-      prog.u('uEye', C.eye); prog.u('uGlow', E.glow); prog.u('uFogS', fogS); prog.u('uFogK', fogK); prog.u('uPxW', pxW);
-    };
-    // sky
-    gl.disable(gl.DEPTH_TEST); gl.disable(gl.BLEND);
-    gl.useProgram(sky.p); shared(sky);
-    sky.u('uR', C.r); sky.u('uU', C.u); sky.u('uF', C.f); sky.u('uMid', E.mid); sky.u('uMidSun', E.midSun);
-    sky.u('uTan', [Math.tan(C.fov / 2) * C.aspect, Math.tan(C.fov / 2)]); sky.u('uStars', E.stars);
-    attribs(sky, quadBuf, [['aQ', 2]], 8);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-    // ground
-    gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
-    gl.useProgram(ground.p); shared(ground);
-    ground.u('uVP', C.vp); ground.u('uSurvey', surveyR(p)); ground.u('uPave', paveR(p)); ground.u('uLit', l);
-    ground.u('uParks', [PARKS[0][0], PARKS[0][1], PARKS[1][0], PARKS[1][1]]);
-    attribs(ground, quadBuf, [['aQ', 2]], 8);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-    // buildings, trees, the monument
-    gl.useProgram(city.p); shared(city);
-    city.u('uVP', C.vp); city.u('uGeo', g); city.u('uMat', m); city.u('uLit', l); city.u('uLamp', sm(cl(l / 0.5))); city.u('uSkyRefl', skyRefl);
-    attribs(city, cityBuf, [['aPos', 3], ['aNrm', 3], ['aBox', 4], ['aDim', 4], ['aMat', 4], ['aClad', 3]], 84);
-    gl.drawArrays(gl.TRIANGLES, 0, cityCount);
-    // lights: additive, tested against the city but not writing depth
-    if (l > 0) {
-      let n = 0;
-      const pt = (x, y, z, r, g2, b, s) => { dyn.set([x, y, z, -1, r, g2, b, s], n * 8); n++; };
-      const carOn = sm(cl((l - 0.1) / 0.5));
-      for (const c of cars) {
-        const s = ((c.s + c.dir * c.v * t + L) % (2 * L) + 2 * L) % (2 * L) - L;
-        const x = c.axis ? c.lane : s, z = c.axis ? s : c.lane;
-        const k = carOn * sm(cl((L - Math.abs(s)) / 2.5));
-        const toward = (c.axis ? (C.eye[2] - z) : (C.eye[0] - x)) * c.dir > 0;
-        if (toward) pt(x, 0.08, z, 1.0 * k, 0.9 * k, 0.72 * k, 0.2); else pt(x, 0.08, z, 0.95 * k, 0.12 * k, 0.07 * k, 0.17);
-      }
-      const blink = Math.pow(0.5 + 0.5 * Math.sin(t * 2.6), 3) * sm(cl((l - 0.85) / 0.15));
-      pt(tower.cx, tower.H + 0.05, tower.cz, blink, 0.12 * blink, 0.08 * blink, 0.5);
-      const up = sm(cl((l - 0.05) / 0.3));
-      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pt(monument.cx + sx * 0.46, 0.4, monument.cz + sz * 0.46, up, 0.75 * up, 0.45 * up, 0.24);
-      gl.bindBuffer(gl.ARRAY_BUFFER, dynBuf);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, dyn.subarray(0, n * 8));
-      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.depthMask(false);
-      gl.useProgram(points.p);
-      points.u('uVP', C.vp); points.u('uEyeP', C.eye); points.u('uPx', Hh / (2 * Math.tan(C.fov / 2)));
-      points.u('uLitP', l); points.u('uFogSP', fogS); points.u('uFogKP', fogK);
-      attribs(points, lampBuf, [['aP', 4], ['aC', 4]], 32);
-      gl.drawArrays(gl.POINTS, 0, lamps.length / 8);
-      attribs(points, dynBuf, [['aP', 4], ['aC', 4]], 32);
-      gl.drawArrays(gl.POINTS, 0, n);
-      gl.depthMask(true); gl.disable(gl.BLEND);
+    const sT = trainS(p), reveal = readyAt === null ? (p >= 1 ? 1 : 0) : (reduce ? 1 : sm(0.3, 6.6, t - readyAt));
+    const golden = sm(0.66, 1.0, p) * 0.88 + 0.12 * reveal;
+    // camera
+    // the look back: the camera arcs up over the station and turns round (heading and pitch, never through the ground)
+    const ch = chase(sT), arc = Math.sin(Math.PI * reveal) * 16, e = reveal, eg = sm(0.0, 0.6, reveal);
+    const drift = reduce ? 0 : Math.sin(t * 0.05) * 6 * reveal;
+    camera.position.set(lerp(ch.pos[0], REVEAL.pos[0] + drift, e), lerp(ch.pos[1], REVEAL.pos[1], e) + arc, lerp(ch.pos[2], REVEAL.pos[2], e));
+    const aim = (from, to) => { const dx = to[0] - from[0], dy = to[1] - from[1], dz = to[2] - from[2], l = Math.hypot(dx, dy, dz) || 1; return [Math.atan2(dx, dz), Math.asin(dy / l)]; };
+    const [yc, p0] = aim(ch.pos, ch.tgt), [y1, p1] = aim(REVEAL.pos, REVEAL.tgt);
+    const y0 = ((yc % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);   // from heading north, turn round by the east: past the sea
+    const yaw = lerp(y0, y1, eg), pitch = lerp(p0, p1, eg) - Math.sin(Math.PI * eg) * 0.1;
+    camera.lookAt(camera.position.x + Math.sin(yaw) * Math.cos(pitch), camera.position.y + Math.sin(pitch), camera.position.z + Math.cos(yaw) * Math.cos(pitch));
+    const portrait = camera.aspect < 0.9;
+    camera.fov = lerp(portrait ? 64 : 50, portrait ? 60 : 44, e); camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    // time of day: bright morning to golden hour
+    const sunEl = lerp(0.9, 0.22, golden), sunAz = lerp(-0.75, -1.42, golden);
+    const sd = new THREE.Vector3(Math.sin(sunAz) * Math.cos(sunEl), Math.sin(sunEl), Math.cos(sunAz) * Math.cos(sunEl));
+    skyU.uSun.value.copy(sd);
+    skyU.uZen.value.set('#2c7fdc').lerp(C('#5f7fc6'), golden);
+    skyU.uHzn.value.set('#c8e5f6').lerp(C('#f7d6b4'), golden);
+    skyU.uSunCol.value.set('#fff1d8').lerp(C('#ffb36a'), golden);
+    skyU.uGlow.value = lerp(0.35, 1.0, golden);
+    scene.fog.color.copy(skyU.uHzn.value);
+    scene.fog.near = lerp(70, 160, e); scene.fog.far = lerp(360, 760, e);
+    sunL.color.set('#fff3df').lerp(C('#ffbd7a'), golden); sunL.intensity = lerp(2.6, 3.0, golden);
+    hemi.color.set('#cfe9ff').lerp(C('#ffe0c4'), golden); hemi.groundColor.set('#7a9a5a').lerp(C('#7d6a52'), golden); hemi.intensity = lerp(1.15, 1.3, golden);
+    const focus = new THREE.Vector3(lerp(ch.tgt[0], 0, e), lerp(ch.tgt[1], 10, e), lerp(ch.tgt[2], -40, e)), ext = lerp(46, 190, e);
+    sunL.position.copy(focus).addScaledVector(sd, 260); sunL.target.position.copy(focus);
+    const sc = sunL.shadow.camera; sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext; sc.near = 10; sc.far = 600; sc.updateProjectionMatrix();
+    sky.position.copy(camera.position);
+    // the build front and things that move
+    U.uP.value = p; U.uT.value = t;
+    for (const m of Object.values(meshes)) m.w.visible = p > m.b0 - 0.001 && p < m.b1 + 0.001;
+    if (meshes.windmill) things.windmill.forEach((it, i) => {
+      const a = it.ry || 0, hub = { ...it, x: it.x + Math.sin(a) * 1.15, y: it.y + 6.8, z: it.z + Math.cos(a) * 1.15, rz: t * 1.3 + i };
+      compose(hub); blades.a.setMatrixAt(i, mats); blades.w.setMatrixAt(i, mats);
+    });
+    if (blades) { blades.a.instanceMatrix.needsUpdate = blades.w.instanceMatrix.needsUpdate = true; }
+    if (meshes.boat) { things.boat.forEach((it, i) => { compose({ ...it, y: Math.sin(t * 1.4 + it.seed) * 0.14 - 0.05, rx: Math.sin(t * 1.1 + it.seed) * 0.05, rz: Math.cos(t * 0.9 + it.seed) * 0.06 }); meshes.boat.a.setMatrixAt(i, mats); meshes.boat.w.setMatrixAt(i, mats); }); meshes.boat.a.instanceMatrix.needsUpdate = meshes.boat.w.instanceMatrix.needsUpdate = true; }
+    if (meshes.cloud) { things.cloud.forEach((it, i) => { compose({ ...it, x: it.x + Math.sin(t * 0.03 + i) * 4, z: it.z + Math.sin(t * 0.02 + i * 2) * 8 }); meshes.cloud.a.setMatrixAt(i, mats); meshes.cloud.w.setMatrixAt(i, mats); }); meshes.cloud.a.instanceMatrix.needsUpdate = meshes.cloud.w.instanceMatrix.needsUpdate = true; }
+    place(loco, sT); place(coaches[0], sT + OFFS[1]); place(coaches[1], sT + OFFS[2]);
+    // smoke: a puff every 0.12 s while the train runs
+    const moving = p > 0.03 && p < 0.995;
+    for (let i = 0; i < PUFFS; i++) {
+      const born = Math.floor(t / 0.11) * 0.11 - i * 0.11, age = t - born;
+      if (!moving || age > 1.9 || born < 0) { mats.makeScale(0, 0, 0); puffMesh.setMatrixAt(i, mats); continue; }
+      const a = pathAt(sT + 2.25 - age * 3.4), k = age / 1.9;   // trails back over the train, never into the camera
+      const size = (0.4 + age * 0.62) * (1 - sm(0.6, 1, k));
+      mats.compose(vec.set(a.p[0] + Math.sin(born * 7) * 0.35 * age, a.p[1] + 3.1 + age * 1.9, a.p[2] + Math.cos(born * 5) * 0.35 * age), quat.identity(), scl.set(size, size * 0.85, size));
+      puffMesh.setMatrixAt(i, mats);
     }
+    puffMesh.instanceMatrix.needsUpdate = true;
+    glowMat.opacity = sm(0.86, 1.0, p) * 0.9 + 0.1 * reveal;
+    glowMat.size = lerp(2.4, 6, e);
+    gl.render(scene, camera);
+    drawMarks(p);
   }
 
-  let last = performance.now(), clock = 0, readySent = false;
+  let last = performance.now(), readySent = false, fontsReady = false;
+  document.fonts.load('600 10px "JetBrains Mono"').then(() => { fontsReady = true; }, () => { fontsReady = true; });
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    if (!heard && !root.classList.contains('swarm-js')) build = 1;   // the engine never came: show the finished city
-    if (!reduce) { clock += dt; dirty = true; }
-    if (dirty) { render(build, clock); dirty = false; }
+    if (!heard && !root.classList.contains('swarm-js')) build = 1;   // the engine never came: show the finished world
+    if (!reduce) clock += dt;
+    if (build >= 1 && readyAt === null) readyAt = clock;
+    render(build, clock);
     if (!readySent) { readySent = true; swarm.ready(canvas); }
     requestAnimationFrame(frame);
   }
