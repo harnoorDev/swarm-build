@@ -12,6 +12,7 @@
   try {
     var d = document.documentElement;
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (navigator.connection && navigator.connection.saveData) return;
     if (localStorage.getItem('swarm-build-off') === '1') return;
     d.classList.add('swarm-js');
     setTimeout(function () { if (!window.__swarmBuild) d.classList.remove('swarm-js'); }, 8000);

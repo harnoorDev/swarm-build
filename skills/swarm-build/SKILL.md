@@ -1,6 +1,6 @@
 ---
 name: swarm-build
-description: Make a website build itself in front of the visitor. Labelled agent cursors frame boxes with live W×H badges, type headlines, restyle accents, stream copy, count stats, sweep 3D scenes in (Three.js, React Three Fiber, Babylon, Spline, model-viewer, WebGL canvases), and optionally a red-team agent tries to rewrite a word until a guardrail agent blocks it. Use when asked for a Swarm-style, multiplayer-cursor, "built by agents" or self-building page or intro, including on 3D sites.
+description: Make a website build itself in front of the visitor. Labelled AI-agent cursors frame boxes with live W×H badges, type headlines, stream copy, count stats, tick off checklists, grow chart bars, and build 3D scenes from the inside (Three.js, Babylon.js, React Three Fiber, Spline, model-viewer), each saying what it is doing; optionally a red-team agent tries to rewrite a word until a guardrail agent blocks it. Zero dependencies, accessible, tested. Use when asked for a Swarm-style, multiplayer-cursor, "built by agents", "AI agents building my site", self-building or self-assembling page, intro, portfolio hero, or 3D scene.
 ---
 
 # swarm-build
@@ -9,9 +9,9 @@ A crew of labelled agent cursors builds the page while the visitor watches. It's
 
 | File | What it is |
 |---|---|
-| `assets/swarm-build.js` | Engine (ES module, no dependencies, about 42 KB unminified, 14 KB gzipped) |
+| `assets/swarm-build.js` | Engine (ES module, no dependencies, about 56 KB unminified, 18 KB gzipped) |
 | `assets/swarm-build.css` | Styles. Every class is `sb-` prefixed and the theme hooks are CSS variables. |
-| `examples/index.html` | Working demo and reference integration |
+| `examples/index.html` | Working demo and reference integration: a portfolio with a typed hero, an attack, stats, cards, a launch checklist (`check`) and a chart (`frame grow`) |
 | `examples/3d-starter.html` | The smallest complete 3D build: four agents build an island in Three.js, in about 200 commented lines. Uses `projector`, build sites with `doing`, and `swarm:work` events for a log. Start a 3D integration here |
 | `examples/3d.html` | A Three.js world that a crew of sixteen builds just ahead of a steam train (fields, a harbour town, a mountain climb): each tag says what its agent is doing, a build log keeps score. Uses build sites with `doing`, `data-swarm-sweep="none"` and `data-swarm-await` |
 | `references/api.md` | Every attribute, option and method, plus the head snippet |
@@ -28,8 +28,10 @@ If the assets are missing, get them from https://github.com/harnoorDev/swarm-bui
    - `stream`: paragraphs, bio
    - `fetch`: short labels and data (location, status, kicker)
    - `count`: numbers
+   - `check`: a list whose items read as passed checks (features, a launch checklist, "what you get"). The eval agent ticks each one in.
+   - `grow`: a bar chart, HTML or SVG. Mark bars with `data-swarm-bar` when the chart has other children (a caption, an axis). Usually `"frame grow"`.
    - `reveal`: anything that should just fade in
-   - `scene`: a 3D viewport (`<canvas>`, the `<div>` a 3D library renders into, `<spline-viewer>`, `<model-viewer>`). Add `data-swarm-await` when it loads models, and `data-swarm-anchors` for up to three points the renderer should inspect. Wire the scene to `swarm:scene` and call `swarm.ready()` (`references/integration.md`, 3D sites). If the scene can animate its own construction, use `data-swarm-sweep="none"` with a longer `data-swarm-duration`, and register build sites (`swarm.anchor(name, fn, { at, by, doing })`) so the crew works inside it. For Three.js, `projector(camera, canvas)` gives the screen point of an object or world position; give each site a `doing` line saying what the agent is building.
+   - `scene`: a 3D viewport (`<canvas>`, the `<div>` a 3D library renders into, `<spline-viewer>`, `<model-viewer>`). Add `data-swarm-await` when it loads models, and `data-swarm-anchors` for up to three points the renderer should inspect. Wire the scene to `swarm:scene` and call `swarm.ready()` (`references/integration.md`, 3D sites). If the scene can animate its own construction, use `data-swarm-sweep="none"` with a longer `data-swarm-duration`, and register build sites (`swarm.anchor(name, fn, { at, by, doing })`) so the crew works inside it. For Three.js or Babylon.js, `projector(camera, canvas)` gives the screen point of an object or world position; give each site a `doing` line saying what the agent is building, and listen to `swarm:work` if the page wants a build log.
    - Combine steps in order when one element needs two, for example `"frame stream"`.
 3. **Pick the attack.** Optional, at most one per page, and only when the site's subject fits (AI, security, trust). Choose a word whose rewrite flips the meaning: `without>with`, `never>always`, `safe>unsafe`. The red-team deletes or types the difference, the guardrail blocks it and rolls it back, and the trace reads "blocked prompt injection". Skip it where it would read as a gimmick.
 4. **Integrate** in four parts. `examples/index.html` shows all of them.
@@ -57,6 +59,7 @@ Run it in a real browser, for example Playwright. Do a fresh context for every p
 - [ ] **Press a key mid-build:** the region finishes within about 2 seconds.
 - [ ] **Phone viewport (390×844, touch):** the build runs, the trace pill stays clear of content, and there's no horizontal overflow.
 - [ ] **Reduced motion:** nothing is hidden, no `.sb-layer` exists, and the credit stays hidden.
+- [ ] **Charts and checklists, if any:** after the build no bar has a `clip-path` left, no list item an inline `opacity`, and every value reads its real number.
 - [ ] **Second load in the same session:** no build. The normal page and its normal animations run.
 - [ ] **Light theme, if the site has one:** the cursors, selection boxes and trace are legible.
 - [ ] **3D scenes, if any:** the scene assembles in sync with the sweep (geometry, then materials, then lighting), ends fully built with no `clip-path` left on the viewport, and the renderer finds every anchor (the console warns about missing ones). Build sites put each agent on something the scene is visibly doing at that moment, and no agent is left floating off its work. With reduced motion the scene shows finished at once. Remove the `swarm.ready()` call once to check that the build waits at most `sceneTimeout` and then carries on.

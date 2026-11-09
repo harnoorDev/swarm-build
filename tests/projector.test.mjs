@@ -1,5 +1,5 @@
-// projector() against Three.js's own Vector3.project, for perspective and orthographic cameras.
-// Run: node --test tests/   (needs `three` installed: npm install --no-save three)
+// projector() against Three.js's Vector3.project and Babylon.js's Vector3.Project, perspective and orthographic.
+// Run: node --test tests/   (needs: npm install --no-save three @babylonjs/core)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -53,6 +53,51 @@ test('null for points off the element, behind the camera, or not points at all',
   assert.equal(toScreen([NaN, 0, 0]), null);
   assert.equal(toScreen(null), null);
   assert.equal(projector(null, el)([0, 0, 0]), null);
+});
+
+test('Babylon: matches Vector3.Project for cameras, nodes and both handednesses', async () => {
+  const B = await import('@babylonjs/core');
+  const engine = new B.NullEngine({ renderWidth: 800, renderHeight: 450, textureSize: 256 });
+  const viewport = new B.Viewport(0, 0, 1, 1).toGlobal(800, 450);
+  let compared = 0;
+  for (const rightHanded of [false, true]) {
+    const scene = new B.Scene(engine);
+    scene.useRightHandedSystem = rightHanded;
+    const cams = [new B.FreeCamera('free', new B.Vector3(0, 5, -20), scene), new B.ArcRotateCamera('arc', 0.8, 1.1, 30, B.Vector3.Zero(), scene)];
+    const ortho = new B.FreeCamera('ortho', new B.Vector3(4, 12, -18), scene);
+    Object.assign(ortho, { mode: B.Camera.ORTHOGRAPHIC_CAMERA, orthoLeft: -20, orthoRight: 20, orthoTop: 11.25, orthoBottom: -11.25 });
+    cams.push(ortho);
+    for (const cam of cams) {
+      scene.activeCamera = cam;
+      for (let k = 0; k < 30; k++) {
+        if (cam.alpha !== undefined) { cam.alpha = rnd(0, 6.28); cam.beta = rnd(0.3, 1.4); }
+        else { cam.position.set(rnd(-20, 20), rnd(1, 20), rnd(-25, -5)); cam.setTarget(new B.Vector3(rnd(-3, 3), 0, rnd(-3, 3))); }
+        const view = cam.getViewMatrix(true), transform = view.multiply(cam.getProjectionMatrix(true));
+        const toScreen = projector(cam, el, { margin: 1e9 });
+        for (let i = 0; i < 10; i++) {
+          const p = new B.Vector3(rnd(-15, 15), rnd(0, 8), rnd(-15, 15));
+          const depth = B.Vector3.TransformCoordinates(p, view).z * (rightHanded ? -1 : 1);
+          if (cam.mode !== B.Camera.ORTHOGRAPHIC_CAMERA && depth <= 0.2) {
+            if (depth <= 0) assert.equal(toScreen([p.x, p.y, p.z]), null, 'a point behind the camera is null');
+            continue;
+          }
+          const want = B.Vector3.Project(p, B.Matrix.IdentityReadOnly, transform, viewport);
+          const node = new B.TransformNode('n', scene);
+          node.position.copyFrom(p);
+          for (const got of [toScreen([p.x, p.y, p.z]), toScreen(node)]) {
+            assert.ok(got, `${cam.name}: a point in front of the camera projects`);
+            assert.ok(Math.abs(got.x - (box.left + want.x)) < 0.01 && Math.abs(got.y - (box.top + want.y)) < 0.01,   // Babylon's matrices are 32-bit floats
+              `${cam.name} rh=${rightHanded}: off by ${got.x - box.left - want.x}, ${got.y - box.top - want.y}`);
+          }
+          node.dispose();
+          compared++;
+        }
+      }
+    }
+    scene.dispose();
+  }
+  engine.dispose();
+  assert.ok(compared > 1000, 'compared ' + compared);
 });
 
 test('follows a camera moved since the last render, and is on the default export', () => {

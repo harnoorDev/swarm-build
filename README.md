@@ -2,14 +2,16 @@
 
 [![test](https://github.com/harnoorDev/swarm-build/actions/workflows/test.yml/badge.svg)](https://github.com/harnoorDev/swarm-build/actions/workflows/test.yml)
 
-**A page that builds itself while you watch.** A crew of labelled agent cursors frames each block with a live `W × H` badge, types the headline, restyles the accents, streams the copy like model output and counts up the stats. On 3D sites, a **renderer agent** sweeps the scene in, or the whole crew goes inside and builds it. If you want, a **red-team agent** tries to rewrite your promise, and the **guardrail agent** blocks it.
+**A page that builds itself while you watch.** A crew of labelled agent cursors frames each block with a live `W × H` badge, types the headline, restyles the accents, streams the copy like model output, counts up the stats, ticks off checklists and drags chart bars into place. On 3D sites, a **renderer agent** sweeps the scene in, or the whole crew goes inside and builds it. If you want, a **red-team agent** tries to rewrite your promise, and the **guardrail agent** blocks it.
 
 ![swarm-build demo: agent cursors building a page](docs/demo.gif)
 
-- **Zero dependencies.** One ES module (~49 KB, ~16 KB gzipped) and one stylesheet (~2.5 KB gzipped).
+- **Zero dependencies.** One ES module (~56 KB, ~18 KB gzipped) and one stylesheet (~2.7 KB gzipped).
 - **Declarative.** You add `data-swarm` and `data-swarm-step` attributes. No timeline code.
 - **Works with 3D sites.** Three.js, React Three Fiber, Babylon, Spline, `<model-viewer>` or a raw WebGL canvas. The scene follows `swarm:scene` progress events (geometry, then materials, then lighting), can make the build wait for its models, and can send any agent to a build site inside it.
-- **Built for real sites.** It plays once per session and fast-forwards on any key, click, tap or scroll. Reduced motion turns it off, the text stays in the DOM, and the agent layers are `aria-hidden`.
+- **Built for real sites.** It plays once per session and fast-forwards on any key, click, tap or scroll. Reduced motion and data savers (Save-Data) get the finished page, the text stays in the DOM, and the agent layers are `aria-hidden`.
+- **Fails open.** If your own code throws inside a build (a build site, a `doing` line), the error is logged and dropped and the build carries on to the end. A page is never left half-built.
+- **Tested.** Every push runs the projector against Three.js and Babylon.js and builds every demo in a real browser.
 - **Ships as a Claude skill.** `skills/swarm-build/SKILL.md` teaches Claude how to add it to any site, with a verification checklist.
 
 **Live demos:** [the page demo](https://harnoordev.github.io/swarm-build/), [the 3D world](https://harnoordev.github.io/swarm-build/skills/swarm-build/examples/3d.html), and in production on [iamharnoor.com](https://iamharnoor.com).
@@ -24,7 +26,7 @@ A crew of sixteen builds a Three.js world just ahead of a little steam train: su
 
 To build your own, start with [the island starter](https://harnoordev.github.io/swarm-build/skills/swarm-build/examples/3d-starter.html) ([source](skills/swarm-build/examples/3d-starter.html)): four agents build a small island in about 200 commented lines.
 
-Each job is a build site: who does the work, when in the build it happens, where the cursor is right now, and what it says it is doing. `projector` turns your Three.js camera into the screen points the cursors follow, and every job start and finish arrives as a `swarm:work` event.
+Each job is a build site: who does the work, when in the build it happens, where the cursor is right now, and what it says it is doing. `projector` turns your Three.js or Babylon.js camera into the screen points the cursors follow, and every job start and finish arrives as a `swarm:work` event.
 
 ```html
 <canvas id="world" data-swarm-step="scene" data-swarm-sweep="none" data-swarm-duration="20" data-swarm-await></canvas>
@@ -69,7 +71,16 @@ canvas.addEventListener('swarm:work', (e) => console.log(e.detail.agent, e.detai
 </script>
 ```
 
-The steps are `frame` (planner), `type` (writer, with accents restyled by the stylist), `stream` (writer), `fetch` (retriever), `count` (eval), `scene` (renderer, for 3D viewports) and `reveal`.
+The steps are `frame` (planner), `type` (writer, with accents restyled by the stylist), `stream` (writer), `fetch` (retriever), `count` (eval), `check` (eval ticks off a list), `grow` (analyst drags each bar of a chart out), `scene` (renderer, for 3D viewports) and `reveal`.
+
+```html
+<ul data-swarm-step="check"><li>SOC 2 Type II</li><li>99.99% uptime</li><li>SSO and SCIM</li></ul>
+
+<figure data-swarm-step="frame grow" style="display:flex; align-items:end; gap:12px; height:160px">
+  <div data-swarm-bar style="flex:1; height:71%; background:#ff6a3d">71%</div>
+  <div data-swarm-bar style="flex:1; height:98%; background:#ff6a3d">98%</div>
+</figure>
+```
 
 For a 3D viewport that the renderer sweeps in:
 
@@ -92,7 +103,8 @@ The full reference is in [`references/api.md`](skills/swarm-build/references/api
 
 ## Install the Claude skill
 
-- **Claude Code:** copy `skills/swarm-build` into `~/.claude/skills/` (or `.claude/skills/` in a project).
+- **With the skills CLI:** `npx skills add harnoorDev/swarm-build --skill swarm-build`
+- **Claude Code by hand:** copy `skills/swarm-build` into `~/.claude/skills/` (or `.claude/skills/` in a project).
 - **claude.ai:** zip the `skills/swarm-build` folder and upload the zip as a custom skill.
 
 Then ask: *"add the swarm build effect to my site"*.
@@ -100,11 +112,11 @@ Then ask: *"add the swarm build effect to my site"*.
 ## Tests
 
 ```bash
-npm install --no-save playwright three && npx playwright install chromium
+npm install --no-save playwright three @babylonjs/core && npx playwright install chromium
 node --test tests/*.test.mjs
 ```
 
-`tests/projector.test.mjs` checks `projector` against Three.js, and `tests/smoke.test.mjs` builds every demo in headless Chromium and fails on any error or anything left behind. They run on every push.
+`tests/projector.test.mjs` checks `projector` against Three.js and Babylon.js, and `tests/smoke.test.mjs` builds every demo in headless Chromium and fails on any error or anything left behind. They run on every push.
 
 ## Credit
 

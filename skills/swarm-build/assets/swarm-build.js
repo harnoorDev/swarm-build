@@ -34,12 +34,14 @@
 //   <i data-swarm-origin>                     the crew orbits this before the first build
 //   <p data-swarm-credit hidden>Built by {agents} agents while you watched.</p>
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const DEFAULT_CREW = {
   planner: '#4ee9f5', retriever: '#e7ff52', writer: '#ffb547', stylist: '#ff8fd8',
-  eval: '#6aa8ff', guardrail: '#8dffb9', 'red-team': '#ff3b3b', renderer: '#b49bff',
+  eval: '#6aa8ff', guardrail: '#8dffb9', 'red-team': '#ff3b3b', renderer: '#b49bff', analyst: '#ff7a45',
 };
-const ROLE = { frame: 'planner', fetch: 'retriever', type: 'writer', stream: 'writer', count: 'eval', scene: 'renderer', reveal: null };
+const ROLE = { frame: 'planner', fetch: 'retriever', type: 'writer', stream: 'writer', count: 'eval', check: 'eval', grow: 'analyst', scene: 'renderer', reveal: null };
+// agents that only join the opening crew when the page has their kind of work (a 3D scene, a chart)
+const ON_CALL = new Set(['renderer', 'analyst']);
 // a scene builds in three phases; the sweep reports which one it is in
 const PHASES = [[0, 'geometry'], [0.45, 'materials'], [0.8, 'lighting']];
 const SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/#%&*+=<>';
@@ -55,6 +57,8 @@ const GLYPHS =
   '<svg class="sb-g sb-g--arrow" width="18" height="22" viewBox="0 0 18 22"><path d="M2 1.5v16.1l4.3-4 2.9 6.6 2.8-1.2-2.8-6.5H15z" fill="var(--c)" stroke="#0b0b0a" stroke-width="1.3" stroke-linejoin="round"/></svg>' +
   '<svg class="sb-g sb-g--ibeam" width="12" height="24" viewBox="0 0 12 24">' + OUTLINED('M2.5 2.5h7M6 2.5v19M2.5 21.5h7') + '</svg>' +
   '<svg class="sb-g sb-g--cross" width="22" height="22" viewBox="0 0 22 22">' + OUTLINED('M11 1.5v7M11 13.5v7M1.5 11h7M13.5 11h7') + '</svg>' +
+  '<svg class="sb-g sb-g--ns" width="14" height="24" viewBox="0 0 14 24">' + OUTLINED('M7 2.5v19M3 6.5l4-4 4 4M3 17.5l4 4 4-4') + '</svg>' +
+  '<svg class="sb-g sb-g--ew" width="24" height="14" viewBox="0 0 24 14">' + OUTLINED('M2.5 7h19M6.5 3l-4 4 4 4M17.5 3l4 4-4 4') + '</svg>' +
   '<svg class="sb-g sb-g--pen" width="22" height="22" viewBox="0 0 22 22"><path d="M2 20l1.7-5.7L14.6 3.4a2 2 0 0 1 2.8 0l1.2 1.2a2 2 0 0 1 0 2.8L7.7 18.3z" fill="var(--c)" stroke="#0b0b0a" stroke-width="1.3" stroke-linejoin="round"/><path d="M2 20l1.7-5.7 4 4z" fill="#0b0b0a"/></svg>';
 
 const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
@@ -100,12 +104,19 @@ class Timeline {
     this.t = t;
     for (const it of this.items) {
       if (it.at > t) break;
-      if (it.fn) { if (!it.fired) { it.fired = true; it.fn(); } continue; }
-      if (it.done) continue;
-      if (!it.started) { it.started = true; if (it.init) it.init(); }
-      const p = Math.min(1, (t - it.at) / it.d);
-      it.update(it.ease(p));
-      if (p >= 1) it.done = true;
+      if (it.fn ? it.fired : it.done) continue;
+      try {
+        if (it.fn) { it.fired = true; it.fn(); continue; }
+        if (!it.started) { it.started = true; if (it.init) it.init(); }
+        const p = Math.min(1, (t - it.at) / it.d);
+        it.update(it.ease(p));
+        if (p >= 1) it.done = true;
+      } catch (err) {
+        // one bad callback (often the page's own: a build site, a `doing` line) is dropped, and the build goes on;
+        // left to throw, it would stop the frame loop and leave the page half-built
+        it.fired = it.done = true;
+        console.error('[swarm-build]', err);
+      }
     }
   }
   finish() {
@@ -135,9 +146,11 @@ export function swarmBuild(options = {}) {
   };
   const root = document.documentElement;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // a visitor saving data (Save-Data, or prefers-reduced-data) gets the finished page at once
+  const lean = !!(navigator.connection && navigator.connection.saveData) || matchMedia('(prefers-reduced-data: reduce)').matches;
   const enabled = () => local.get(o.key + '-off') !== '1';
   const seen = () => o.once === 'session' && session.get(o.key) === '1';
-  const active = !reduce && enabled() && !seen() && (root.classList.contains('swarm-js') || o.force === true);
+  const active = !reduce && !lean && enabled() && !seen() && (root.classList.contains('swarm-js') || o.force === true);
   const originals = new Map();
   const queue = [];
   const agentsUsed = new Set();
@@ -254,7 +267,7 @@ export function swarmBuild(options = {}) {
       if (stepsOf(el).includes('scene')) sitesOf(el).forEach((s) => need.add(s.by || 'renderer'));
     });
     // the opening orbit shows the whole crew; the renderer only joins when this region has a 3D scene
-    if (isFirst) Object.keys(o.crew).forEach((id) => { if (id !== 'renderer' || need.has('renderer')) need.add(id); });
+    if (isFirst) Object.keys(o.crew).forEach((id) => { if (!ON_CALL.has(id) || need.has(id)) need.add(id); });
     const A = {};
     Object.keys(o.crew).filter((id) => need.has(id)).forEach((id, i) => {
       const el = put('sb-ag');
@@ -382,6 +395,78 @@ export function swarmBuild(options = {}) {
         }).filter(Boolean);
       });
     }
+    // the parts of things that show a value ("98%", "4.2K", "$12", "800 ms"); they count up as they appear
+    const VALUE = /^(\s*[$€£¥]?)(\d[\d,]*\.?\d*)(\s*(?:%|[kKmMbB]|ms|s|x)?\s*)$/;
+    const values = (el) => textNodes(el).map((n) => {
+      const m = n.textContent.match(VALUE);
+      return m ? { n, pre: m[1], num: parseFloat(m[2].replace(/,/g, '')), dec: (m[2].split('.')[1] || '').length, post: m[3], text: n.textContent } : null;
+    }).filter(Boolean);
+    const tally = (parts, p) => parts.forEach((q) => { q.n.textContent = p >= 1 ? q.text : q.pre + (q.num * p).toFixed(q.dec) + q.post; });
+    const partsOf = (el, mark) => { const marked = $$('[' + mark + ']', el); return marked.length ? marked : Array.from(el.children).filter((c) => !c.matches('script, style, template')); };
+
+    // grow: the analyst drags each bar of a chart out from its base, its value counting up with it.
+    // A clip reveal, not a scale, so text inside a bar never squashes.
+    function grow(a, el, t) {
+      const bars = partsOf(el, 'data-swarm-bar');
+      tl.call(t, () => el.classList.add('sb-built'));
+      if (!bars.length) { fade(el, t, 0.3); return t + 0.3; }
+      const axisOf = (bar) => { const f = bar.dataset.swarmGrow || el.dataset.swarmGrow; if (f === 'x' || f === 'y') return f; const r = bar.getBoundingClientRect(); return r.height >= r.width ? 'y' : 'x'; };
+      const per = Math.min(0.42, Math.max(0.14, 2.4 / bars.length));
+      const axis0 = axisOf(bars[0]);
+      glyph(a, axis0 === 'y' ? 'ns' : 'ew', t - 0.15);
+      log('analyst', 'plotting ' + label(el) + ' · ' + bars.length + ' bars', t);
+      bars.forEach((b) => { b.dataset.sbClip = b.style.clipPath; b.style.clipPath = 'inset(0 0 100% 0)'; });   // from now: a frame step may show the chart first
+      bars.forEach((bar, i) => {
+        const axis = axisOf(bar), r = rel(bar), ti = t + i * per;
+        const base = axis === 'y' ? [r.x + r.w / 2, r.y + r.h] : [r.x, r.y + r.h / 2];
+        go(a, base[0], base[1], ti - (i ? per * 0.3 : 0.4), i ? per * 0.3 : 0.4);
+        let parts = [];
+        tl.tween(ti, per * 0.85, 'out', (p) => {
+          bar.style.clipPath = p >= 1 ? bar.dataset.sbClip : axis === 'y' ? `inset(${(1 - p) * 100}% 0 0 0)` : `inset(0 ${(1 - p) * 100}% 0 0)`;
+          if (p >= 1) delete bar.dataset.sbClip;
+          tally(parts, p);
+          if (p < 1) a.set(axis === 'y' ? base[0] : r.x + r.w * p, axis === 'y' ? r.y + r.h * (1 - p) : base[1]);
+        }, () => { parts = values(bar); });
+      });
+      const done = t + bars.length * per;
+      glyph(a, 'arrow', done + 0.05);
+      return done;
+    }
+
+    // check: the eval agent works down a list, ticking each item in as it lands, then signs the list off
+    function check(a, el, t) {
+      const items = partsOf(el, 'data-swarm-item');
+      tl.call(t, () => el.classList.add('sb-built'));
+      if (!items.length) { fade(el, t, 0.3); return t + 0.3; }
+      const per = Math.min(0.26, Math.max(0.1, 2 / items.length));
+      log('eval', 'checking ' + label(el) + ' · ' + items.length + ' items', t);
+      items.forEach((it) => { it.dataset.sbFade = it.style.opacity; it.style.opacity = '0'; });   // from now: a frame step may show the list first
+      const ticks = [];
+      let last = null;
+      items.forEach((it, i) => {
+        const r = rel(it), ti = t + 0.15 + i * per, cs = getComputedStyle(it);
+        const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4 || 20;
+        const y = r.y + Math.min(r.h / 2, (parseFloat(cs.paddingTop) || 0) + lh / 2);   // the middle of its first line
+        last = r;
+        go(a, r.x - 30, y + 4, ti - (i ? per * 0.55 : 0.35), i ? per * 0.55 : 0.35);
+        const tick = put('sb-tick');
+        ticks.push(tick);
+        Object.assign(tick.style, { left: (r.x - 14) + 'px', top: y + 'px', opacity: 0 });
+        tick.style.setProperty('--sb-tick', o.crew[a.id] || '#6aa8ff');
+        tl.tween(ti, 0.18, 'out', (p) => { tick.style.opacity = p; tick.style.transform = `scale(${0.4 + 0.6 * p})`; });
+        tl.tween(ti + 0.02, 0.28, 'out', (p) => {
+          it.style.opacity = p >= 1 ? it.dataset.sbFade : String(p);
+          it.style.translate = p >= 1 ? '' : `${-8 * (1 - p)}px 0`;
+          if (p >= 1) delete it.dataset.sbFade;
+        });
+      });
+      const done = t + 0.15 + items.length * per;
+      chip('✓ ' + items.length + '/' + items.length + ' passed', o.crew.eval, last.x, last.y + last.h + 8, done, 1.1);
+      log('eval', label(el) + ' · ' + items.length + '/' + items.length + ' passed', done);
+      tl.tween(done + 0.8, 0.35, 'in', (p) => ticks.forEach((k) => { k.style.opacity = 1 - p; }));
+      return done;
+    }
+
     function chip(text, color, x, y, t, life) {
       const c = put('sb-chip');
       c.textContent = text;
@@ -697,6 +782,12 @@ export function swarmBuild(options = {}) {
           glyph(a, 'arrow', t + d + 0.1);
           done = t + d;
           shown.set(el, t);
+        } else if (s === 'grow' && a) {
+          done = grow(a, el, t);
+          shown.set(el, t);
+        } else if (s === 'check' && a) {
+          done = check(a, el, t);
+          shown.set(el, t);
         } else if (s === 'scene') {
           done = scene(a, el, t);
           shown.set(el, t);
@@ -737,6 +828,7 @@ export function swarmBuild(options = {}) {
     tl.call(tX + 0.95, () => {});
     const finishUp = () => {
       list.forEach((el) => { restore(el); el.classList.remove('sb-split'); el.classList.add('sb-built'); el.style.opacity = ''; sceneDone(el); });
+      unstep(region);
       region.classList.add('swarm-done');
       region.classList.remove('sb-host', 'sb-rel');
       setTimeout(() => { layer.remove(); if (!document.querySelector('.sb-layer')) root.classList.remove('sb-building'); }, 900);
@@ -745,9 +837,15 @@ export function swarmBuild(options = {}) {
   }
 
   // ---------------------------------------------------------------- running
+  // whatever a grow or check step had in hand when the build ended is put back: bars unclipped, items shown
+  function unstep(scope) {
+    $$('[data-sb-clip]', scope).forEach((b) => { b.style.clipPath = b.dataset.sbClip; delete b.dataset.sbClip; });
+    $$('[data-sb-fade]', scope).forEach((it) => { it.style.opacity = it.dataset.sbFade; it.style.translate = ''; delete it.dataset.sbFade; });
+  }
   function release(region, withOrphans) {
     const list = $$('[data-swarm-step]', region).concat(withOrphans ? $$('[data-swarm-step]').filter((el) => !el.closest('[data-swarm]')) : []);
     list.forEach((el) => { restore(el); el.classList.remove('sb-split'); el.classList.add('sb-built'); el.style.opacity = ''; sceneDone(el); });
+    unstep(region);
     $$('[data-swarm-credit]').forEach((c) => { if (withOrphans) c.hidden = true; });
     region.classList.add('swarm-done');
   }
@@ -835,7 +933,16 @@ export function swarmBuild(options = {}) {
      * (or a function returning one) under its name while it works, `on` the scene element or selector (default the
      * first scene on the page). Register sites before the region builds.
      */
-    anchor(name, fn, opts = {}) { if (fn) anchors.set(name, { ...opts, fn }); else anchors.delete(name); return this; },
+    anchor(name, fn, opts = {}) {
+      if (!fn) { anchors.delete(name); return this; }
+      // a site or `doing` line that throws is logged once, then reads as off screen (the agent slips away) or blank
+      const guard = (f, fallback) => { let broken = false; return (...args) => {
+        if (broken) return fallback;
+        try { return f(...args); } catch (err) { broken = true; console.error('[swarm-build] build site "' + name + '":', err); return fallback; }
+      }; };
+      anchors.set(name, { ...opts, fn: guard(fn, null), doing: typeof opts.doing === 'function' ? guard(opts.doing, '') : opts.doing });
+      return this;
+    },
     /** Build again from the top: clears the once-per-session flag and reloads. */
     replay() { session.set(o.key, '0'); local.set(o.key + '-off', '0'); scrollTo(0, 0); location.reload(); },
     /** Persistently turn the effect on or off for this visitor. */
@@ -844,10 +951,11 @@ export function swarmBuild(options = {}) {
 }
 
 /**
- * Turns a Three.js camera (or any camera with column-major `projectionMatrix` and `matrixWorldInverse`, as
- * Three's are) and the element it renders into a function for build sites and anchors: give it an Object3D,
- * a { x, y, z } or an [x, y, z] in world space and it returns the point on screen, or null when the point
- * is behind the camera or more than `margin` pixels off the element.
+ * Turns a Three.js or Babylon.js camera, and the element it renders into, into a function for build sites and
+ * anchors: give it a Three.js Object3D, a Babylon node, a { x, y, z } or an [x, y, z] in world space and it
+ * returns the point on screen, or null when the point is behind the camera or more than `margin` pixels off
+ * the element. Any camera with column-major `projectionMatrix` and `matrixWorldInverse` (as Three's are), or
+ * with `getViewMatrix()` and `getProjectionMatrix()` (as Babylon's are), works.
  *   swarm.anchor('roof', () => toScreen(roof), { at: 0.6, by: 'roofer' });   // toScreen = projector(camera, canvas)
  */
 export function projector(camera, el, { margin = 40 } = {}) {
@@ -856,13 +964,18 @@ export function projector(camera, el, { margin = 40 } = {}) {
     if (!target || !camera) return null;
     let x, y, z;
     if (Array.isArray(target)) [x, y, z] = target;
+    else if (target.getAbsolutePosition) ({ x, y, z } = target.getAbsolutePosition());   // a Babylon node
     else if (target.matrixWorld) {
       if (target.updateWorldMatrix) target.updateWorldMatrix(true, false);
       const e = target.matrixWorld.elements; x = e[12]; y = e[13]; z = e[14];
     } else ({ x, y, z } = target);
     if (![x, y, z].every(Number.isFinite)) return null;
-    if (camera.updateMatrixWorld) camera.updateMatrixWorld();   // keeps matrixWorldInverse in step with a camera moved since the last render
-    const v = camera.matrixWorldInverse.elements, m = camera.projectionMatrix.elements;
+    let v, m;
+    if (camera.getViewMatrix && camera.getProjectionMatrix) { v = camera.getViewMatrix().m; m = camera.getProjectionMatrix().m; }   // Babylon: same layout
+    else {
+      if (camera.updateMatrixWorld) camera.updateMatrixWorld();   // keeps matrixWorldInverse in step with a camera moved since the last render
+      v = camera.matrixWorldInverse.elements; m = camera.projectionMatrix.elements;
+    }
     const vx = v[0] * x + v[4] * y + v[8] * z + v[12], vy = v[1] * x + v[5] * y + v[9] * z + v[13], vz = v[2] * x + v[6] * y + v[10] * z + v[14];
     const w = m[3] * vx + m[7] * vy + m[11] * vz + m[15];
     if (w <= 1e-6) return null;                                     // behind the camera

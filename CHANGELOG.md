@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0 (2026-11-09)
+
+### Added
+
+- **`check` step.** The eval agent works down a list, ticking each item in as it lands, and signs it off with a "✓ 6/6 passed" chip. For feature lists, launch checklists and "what you get". Items are the list's children, or anything marked `data-swarm-item`.
+- **`grow` step and the analyst agent.** A resize cursor drags each bar of a chart (HTML or SVG) out from its base while any value inside it counts up. A clip reveal, so text inside bars never squashes. Bars are the children, or anything marked `data-swarm-bar`; `data-swarm-grow="x"` or `"y"` overrides the direction. Like the renderer, the analyst only joins the opening crew on pages with a chart.
+- **Babylon.js in `projector`.** Babylon cameras and nodes project to within 0.01 px of Babylon's own `Vector3.Project`, left- or right-handed, perspective or orthographic.
+- **`'ns'` and `'ew'` resize cursors** for `glyph`.
+- **Save-Data.** Visitors with a data saver on (or `prefers-reduced-data`) get the finished page, as with reduced motion. The head snippet checks it too.
+- The 2D demo gains a launch checklist and an eval pass-rate chart.
+
+### Fixed
+
+- **A page's own error no longer freezes the build.** A build site, `doing` line or other callback that threw stopped the frame loop and left the page half-built for good. Each callback now runs on its own. A build site or `doing` line that throws is logged once and then reads as off screen, so its agent slips away; any other callback that throws is logged and dropped. The build finishes either way.
+
 ## 1.2.0 (2026-11-09)
 
 The crew can now build a 3D scene from the inside, not just sweep it in.

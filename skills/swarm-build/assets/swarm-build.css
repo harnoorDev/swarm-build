@@ -16,6 +16,8 @@
 .swarm-js [data-swarm-step~="frame"]:not(.sb-built),
 .swarm-js [data-swarm-step~="reveal"]:not(.sb-built),
 .swarm-js [data-swarm-step~="count"]:not(.sb-built),
+.swarm-js [data-swarm-step~="grow"]:not(.sb-built),
+.swarm-js [data-swarm-step~="check"]:not(.sb-built),
 .swarm-js [data-swarm-step~="scene"]:not(.sb-built) { opacity: 0; }
 .swarm-js [data-swarm-step~="fetch"]:not(.sb-built),
 .swarm-js [data-swarm-step~="type"]:not(.sb-split):not(.sb-built),
@@ -39,8 +41,9 @@ html.sb-building, html.sb-building body { overflow-x: clip; }   /* cursors flyin
 .sb-ag__in { position: relative; animation: sb-bob 2.6s ease-in-out infinite alternate; }
 @keyframes sb-bob { from { transform: translate(0, 0); } to { transform: translate(2px, -3px); } }
 .sb-g { display: none; position: absolute; overflow: visible; max-width: none; max-height: none; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .55)); }
-.sb-ag[data-g="arrow"] .sb-g--arrow, .sb-ag[data-g="ibeam"] .sb-g--ibeam, .sb-ag[data-g="cross"] .sb-g--cross, .sb-ag[data-g="pen"] .sb-g--pen { display: block; }
-.sb-g--arrow { left: -2px; top: -1.5px; } .sb-g--ibeam { left: -6px; top: -12px; } .sb-g--cross { left: -11px; top: -11px; } .sb-g--pen { left: -2px; top: -20px; }
+.sb-ag[data-g="arrow"] .sb-g--arrow, .sb-ag[data-g="ibeam"] .sb-g--ibeam, .sb-ag[data-g="cross"] .sb-g--cross, .sb-ag[data-g="pen"] .sb-g--pen,
+.sb-ag[data-g="ns"] .sb-g--ns, .sb-ag[data-g="ew"] .sb-g--ew { display: block; }
+.sb-g--arrow { left: -2px; top: -1.5px; } .sb-g--ibeam { left: -6px; top: -12px; } .sb-g--cross { left: -11px; top: -11px; } .sb-g--pen { left: -2px; top: -20px; } .sb-g--ns { left: -7px; top: -12px; } .sb-g--ew { left: -12px; top: -7px; }
 .sb-ag__tag, .sb-you span {
   position: absolute; left: 12px; top: 16px; padding: 2px 6px; border-radius: 4px; background: var(--c, #fff); color: #0b0b0a;
   font: 600 10.5px/1.35 var(--sb-mono); letter-spacing: .02em; text-transform: none; white-space: nowrap; box-shadow: 0 2px 10px rgba(0, 0, 0, .45);
@@ -59,6 +62,8 @@ html.sb-building, html.sb-building body { overflow-x: clip; }   /* cursors flyin
 .sb-sel__wh { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 7px); padding: 3px 5px; border-radius: 3px; background: var(--sb-select); color: #fff; font: 600 10.5px/1 var(--sb-mono); white-space: nowrap; }
 .sb-hl { position: absolute; background: color-mix(in srgb, var(--sb-select) 34%, transparent); border-radius: 2px; }
 .sb-guard { position: absolute; border: 1.5px solid var(--sb-ok); border-radius: 6px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--sb-ok) 14%, transparent), 0 0 24px color-mix(in srgb, var(--sb-ok) 25%, transparent); }
+.sb-tick { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--sb-tick, #6aa8ff); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+.sb-tick::after { content: ""; position: absolute; left: 5.5px; top: 3px; width: 3.5px; height: 7px; border: solid #0b0b0a; border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .sb-chip { position: absolute; padding: 4px 7px; border-radius: 4px; color: #0b0b0a; font: 600 10.5px/1 var(--sb-mono); letter-spacing: .06em; white-space: nowrap; box-shadow: 0 6px 18px -6px rgba(0, 0, 0, .6); }
 
 /* 3D scenes: a wireframe grid over the part not yet rendered, the scan line, and the phase readout */

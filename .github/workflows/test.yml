@@ -19,7 +19,7 @@ jobs:
       - name: Syntax
         run: node --check skills/swarm-build/assets/swarm-build.js
       - name: Install the test tools (no package.json, the library has no dependencies)
-        run: npm install --no-save --no-package-lock playwright@1 three@0.187.0
+        run: npm install --no-save --no-package-lock playwright@1 three@0.187.0 @babylonjs/core@8
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Projector and browser smoke tests

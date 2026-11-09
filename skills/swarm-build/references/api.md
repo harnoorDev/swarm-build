@@ -2,7 +2,7 @@
 
 ## Head snippet
 
-This goes inline in `<head>` before the stylesheet paints. It decides whether this visit builds and is the only thing that ever hides content. With no JavaScript, reduced motion, the effect switched off, or a repeat visit in the same session, `<html>` never gets `swarm-js` and the page renders normally.
+This goes inline in `<head>` before the stylesheet paints. It decides whether this visit builds and is the only thing that ever hides content. With no JavaScript, reduced motion, a data saver (Save-Data), the effect switched off, or a repeat visit in the same session, `<html>` never gets `swarm-js` and the page renders normally.
 
 ```html
 <script>
@@ -10,6 +10,7 @@ This goes inline in `<head>` before the stylesheet paints. It decides whether th
   try {
     var d = document.documentElement, k = 'swarm-build';
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (navigator.connection && navigator.connection.saveData) return;   // a data saver gets the finished page
     if (localStorage.getItem(k + '-off') === '1') return;
     if (sessionStorage.getItem(k) === '1') return;            // drop this line for once: 'always'
     d.classList.add('swarm-js');
@@ -37,6 +38,9 @@ If you change the `key` option, change `k` to match.
 | `data-swarm-anchors="a, b"` | a `scene` element | Up to three points inside the scene the renderer inspects after the sweep. Register each with `swarm.anchor(name, fn)`. |
 | `data-swarm-sweep="none"` | a `scene` element | No wipe, grid or scan line: the scene is shown whole and builds itself from the `swarm:scene` progress, which runs linearly. The progress readout stays. Use it when the scene animates its own construction. |
 | `data-swarm-duration="7"` | a `scene` element | How long the build takes, in seconds (0.5 to 30, default 1.5). Give a scene that builds itself room to do it. |
+| `data-swarm-bar` | inside a `grow` element | Marks the bars of a chart. Without any, every child of the `grow` element is a bar. |
+| `data-swarm-grow="y"` | a `grow` element or a bar | The direction a bar grows: `y` from its base up, `x` from its start across. By default a bar taller than it is wide grows up, and one wider than tall grows across. |
+| `data-swarm-item` | inside a `check` element | Marks the items of a list. Without any, every child of the `check` element (each `<li>`) is an item. |
 
 ### Steps
 
@@ -47,10 +51,12 @@ If you change the `key` option, change `k` to match.
 | `stream` | writer | Words appear like model tokens | Each word appears |
 | `fetch` | retriever | The text scrambles into place | The step starts |
 | `count` | eval | Numbers count up from 0, keeping prefix, suffix and decimals (`2.2K`, `$1,200`), with a "✓ verified" chip | The step starts |
+| `check` | eval | For a list. The agent works down it, ticking each item in as it lands, then signs it off with a "✓ 6/6 passed" chip. Good for feature lists, launch checklists, "what you get". | Each item is ticked |
+| `grow` | analyst | For a chart (HTML or SVG bars). A resize cursor drags each bar out from its base while any value inside it (`98%`, `4.2K`, `$12`, `800 ms`) counts up. A clip reveal, so text inside bars never squashes. Pair with `frame` to draw the chart's box first: `data-swarm-step="frame grow"`. | Each bar is drawn |
 | `reveal` | none | A plain fade | The step starts |
 | `scene` | renderer | For a 3D viewport (a `<canvas>`, `<spline-viewer>`, `<model-viewer>`, or the element wrapping one). The renderer frames it, then a scan line sweeps it in over a wireframe grid while a readout goes geometry → materials → lighting → first frame. The scene hears every step as a `swarm:scene` event, so it can assemble itself in sync. Build sites send other agents into the scene while it builds. Then the renderer visits any `data-swarm-anchors`, following them as they move. | The sweep passes over it (or, with `data-swarm-sweep="none"`, the step starts) |
 
-Agents work through their own queues in parallel, so the planner can frame boxes while the writer types. The renderer only joins the opening orbit on pages that have a `scene`. Steps are staggered 0.2 s apart in document order, and a step inside a framed element waits until the frame is done. Regions build one at a time: a region that scrolls in while another is building waits its turn, and is skipped back to waiting if it has left the view by then.
+Agents work through their own queues in parallel, so the planner can frame boxes while the writer types. The renderer and the analyst only join the opening orbit on pages that have a `scene` or a `grow` chart. Steps are staggered 0.2 s apart in document order, and a step inside a framed element waits until the frame is done. Regions build one at a time: a region that scrolls in while another is building waits its turn, and is skipped back to waiting if it has left the view by then.
 
 ## Options
 
@@ -58,7 +64,7 @@ Agents work through their own queues in parallel, so the planner can frame boxes
 
 | Option | Default | Notes |
 |---|---|---|
-| `crew` | 8 agents | `{ name: color }`. Work is assigned by the role names `planner`, `retriever`, `writer`, `stylist`, `eval`, `guardrail`, `red-team` and `renderer`, so keep those keys. Extra names join the first region's orbit, and build sites can put them to work (`by`). Without a `renderer`, scenes are still swept in, just with no cursor. |
+| `crew` | 9 agents | `{ name: color }`. Work is assigned by the role names `planner`, `retriever`, `writer`, `stylist`, `eval`, `guardrail`, `red-team`, `renderer` and `analyst`, so keep those keys. Extra names join the first region's orbit, and build sites can put them to work (`by`). Without a `renderer`, scenes are still swept in, just with no cursor. |
 | `key` | `'swarm-build'` | Storage key. `key` in sessionStorage means "already built this session", and `key + '-off'` in localStorage means "switched off". |
 | `once` | `'session'` | Use `'always'` to build on every load (demos). |
 | `speed` | `1` | Global time scale. |
@@ -83,7 +89,7 @@ swarm.replay()      // clear the session flag and reload from the top
 swarm.ready(el)     // a data-swarm-await scene has loaded: sweep it in (element or selector)
 swarm.anchor(name, () => ({ x, y }))   // a point inside a 3D scene, in viewport pixels (null when off screen)
 swarm.anchor(name, fn, { at, by, hold, say, label, on, glyph, pin, doing })   // a build site (see below)
-swarm.version       // '1.2.0'
+swarm.version       // '1.3.0'
 
 import { projector } from './swarm-build.js';
 const toScreen = projector(camera, canvas);   // Three.js world point → { x, y } on screen, for anchors (see below)
@@ -117,7 +123,7 @@ An anchor registered with `at` is a build site: while the scene is at that progr
 | `say` | `building <name>` | The trace line, attributed to that agent. |
 | `label` | the name | Pin text; `false` for a bare ring. |
 | `on` | the first scene on the page | The scene element, or a selector, the site belongs to. |
-| `glyph` | `'arrow'` | The cursor the agent works with: `'arrow'`, `'cross'`, `'ibeam'` or `'pen'`. Anything but the arrow sits right on the point. |
+| `glyph` | `'arrow'` | The cursor the agent works with: `'arrow'`, `'cross'`, `'ibeam'`, `'pen'`, or the resize cursors `'ns'` and `'ew'`. Anything but the arrow sits right on the point. |
 | `pin` | `true` | `false` leaves out the ring, for scenes that draw their own marks. |
 | `doing` | none | A line, or a function returning one, shown under the agent's name while it works ("planting pines 3/5"). Called every frame, so it can count. |
 
@@ -136,9 +142,9 @@ canvas.addEventListener('swarm:work', (e) => {
 
 Use them for a build log, sounds, or analytics. They fire in order, including when the build is fast-forwarded; a visit that does not build (repeat visit, reduced motion, effect off) fires none, so never wait on them.
 
-### Projecting points (Three.js)
+### Projecting points (Three.js and Babylon.js)
 
-`projector(camera, el, { margin = 40 })` turns a Three.js camera, and the element it renders into, into the function anchors and build sites need. Give it an `Object3D`, a `{ x, y, z }` or an `[x, y, z]` in world space; it returns `{ x, y }` in viewport pixels, or `null` when the point is behind the camera or more than `margin` pixels off the element (so the agent waits, or slips off the edge). It needs no import of Three.js: any camera with column-major `projectionMatrix` and `matrixWorldInverse` works, perspective or orthographic. It is also on the default export, as `swarmBuild.projector`.
+`projector(camera, el, { margin = 40 })` turns a Three.js or Babylon.js camera, and the element it renders into, into the function anchors and build sites need. Give it a Three.js `Object3D`, a Babylon node or mesh, a `{ x, y, z }` or an `[x, y, z]` in world space; it returns `{ x, y }` in viewport pixels, or `null` when the point is behind the camera or more than `margin` pixels off the element (so the agent waits, or slips off the edge). It imports neither library: any camera with column-major `projectionMatrix` and `matrixWorldInverse` (Three.js) or `getViewMatrix()` and `getProjectionMatrix()` (Babylon.js) works, perspective or orthographic, left- or right-handed. It is also on the default export, as `swarmBuild.projector`.
 
 ```js
 const toScreen = projector(camera, renderer.domElement);
@@ -146,7 +152,16 @@ swarm.anchor('roof', () => toScreen(roof), { at: 0.6, by: 'roofer', doing: 'roof
 swarm.anchor('peak', () => toScreen([0, 12 * build, 0]));   // a point that rises with the build
 ```
 
-For other engines, return the screen point yourself: Babylon's `Vector3.Project`, or `getBoundingClientRect()` for a hotspot element.
+```js
+const toScreen = projector(scene.activeCamera, engine.getRenderingCanvas());   // Babylon.js
+swarm.anchor('tower', () => toScreen(towerMesh), { at: 0.3, by: 'mason', doing: 'raising the tower' });
+```
+
+For anything else, return the screen point yourself: `getBoundingClientRect()` of a hotspot element, say.
+
+### When something throws
+
+The page's own callbacks run inside the build. A build site or `doing` line that throws is logged once to the console (`[swarm-build] build site "name":`) and from then on reads as off screen (its agent slips away) or blank. Any other callback that throws is logged and dropped. Either way the build carries on to the end, so a bug in a site never leaves the page half-built.
 
 The app can also dispatch `swarm:ready` on the element itself instead of calling `swarm.ready(el)`.
 
