@@ -84,7 +84,7 @@ The renderer agent frames the viewport and waits for `swarm.ready(stage)`. Then 
 ```js
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { swarmBuild } from './swarm-build.js';
+import { swarmBuild, projector } from './swarm-build.js';
 
 const swarm = swarmBuild().start();
 const stage = document.getElementById('stage');
@@ -95,12 +95,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 stage.appendChild(renderer.domElement);
 // …camera, lights…
 
-const toScreen = (obj) => {
-  const v = obj.getWorldPosition(new THREE.Vector3()).project(camera);
-  if (v.z > 1) return null;                                    // behind the camera
-  const r = renderer.domElement.getBoundingClientRect();
-  return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height };
-};
+const toScreen = projector(camera, renderer.domElement);   // an Object3D or [x, y, z] → screen point, null when out of view
 
 let model;
 new GLTFLoader().load('/plane.glb', (gltf) => {
@@ -159,7 +154,7 @@ function Model({ build, onLoaded }) {
 }
 ```
 
-For anchors, use `useThree()` to get `camera` and `gl.domElement`, and project the same way as the Three.js example.
+For anchors, use `useThree()` to get `camera` and `gl.domElement`, and make the same projector: `const toScreen = useMemo(() => projector(camera, gl.domElement), [camera, gl])`.
 
 ### Babylon.js
 
@@ -185,7 +180,7 @@ viewer.addEventListener('load', () => swarm.ready(viewer));
 
 ### A scene that builds itself, with the crew on site
 
-When the scene animates its own construction (a city going up, a product assembling, a level being laid out), drop the wipe and give the crew jobs inside it. `examples/3d.html` builds a whole Three.js world this way, just ahead of a steam train, and every agent's tag says what it is doing:
+When the scene animates its own construction (a city going up, a product assembling, a level being laid out), drop the wipe and give the crew jobs inside it. Start from `examples/3d-starter.html`: four agents build a small island in about 200 commented lines. `examples/3d.html` builds a whole Three.js world the same way, just ahead of a steam train, and every agent's tag says what it is doing:
 
 ```html
 <canvas id="world" data-swarm-step="scene" data-swarm-sweep="none" data-swarm-duration="20" data-swarm-await></canvas>
@@ -198,11 +193,15 @@ let build = document.documentElement.classList.contains('swarm-js') ? 0 : 1;
 canvas.addEventListener('swarm:scene', (e) => { build = e.detail.progress; });
 
 // each site: who works there, and when (scene progress); fn follows the point as it moves or grows
+const toScreen = projector(camera, canvas);
 swarm
   .anchor('plaza', () => toScreen(plaza), { at: 0, by: 'surveyor', say: 'staking out the plaza', label: false })
   .anchor('tower', () => toScreen(towerRoofAt(build)), { at: 0.11, by: 'mason', hold: 1.6, glyph: 'cross', doing: () => 'topping out, floor ' + floorAt(build) })
   .anchor('lamps', () => toScreen(lamp), { at: 0.8, by: 'electrician', say: 'switching on the street lamps' });
 swarm.start();
+
+// the page hears each job start and finish: a build log, a sound, a counter
+canvas.addEventListener('swarm:work', (e) => { if (e.detail.phase === 'done') console.log(e.detail.agent, 'finished', e.detail.site); });
 ```
 
 Tie each site to something the scene is visibly doing at that progress, and point `fn` at where it is happening right now (the roof as it rises, the edge of the paving as it spreads), so the cursor is always on the work, and give it a `doing` line so the visitor can read what it is building. If the camera moves during the build, agents stay with their last site a beat, then head for their next one. Without WebGL, or before the first frame, return `null`: the agent waits where it is.

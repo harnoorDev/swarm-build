@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#cfe7f6">
+<title>swarm-build · a small island, built by its crew</title>
+<meta name="description" content="The smallest complete swarm-build 3D scene: four agents build an island in Three.js. Start here, then read examples/3d.html.">
+<!-- 1 · The head snippet (once: 'always' for a demo; see references/api.md). -->
+<script>
+(function () {
+  try {
+    var d = document.documentElement;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (localStorage.getItem('swarm-build-off') === '1') return;
+    d.classList.add('swarm-js');
+    setTimeout(function () { if (!window.__swarmBuild) d.classList.remove('swarm-js'); }, 8000);
+  } catch (e) {}
+})();
+</script>
+<link rel="stylesheet" href="../assets/swarm-build.css">
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js" } }</script>
+<style>
+  :root { color-scheme: light; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { background: linear-gradient(#a8d5f2, #e6f2f9) #d7ecf8; font: 500 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #16181d; }
+  main { position: fixed; inset: 0; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  main .sb-scene__hud { display: none; }                      /* the island builds itself: no progress readout */
+  .sb-ag[style*="#16181d"] .sb-ag__tag { color: #fff; }       /* ink tags get light text */
+  h1, .log, .again { z-index: 1; }
+  h1 { position: absolute; top: 14px; left: 16px; margin: 0; font: inherit; font-weight: 600; }
+  .log { position: absolute; left: 16px; bottom: 14px; margin: 0; padding: 0; list-style: none; pointer-events: none; }
+  .log li { animation: in .3s ease-out; } .log li:nth-last-child(n+4) { display: none; }
+  .log b { font-weight: 600; }
+  @keyframes in { from { opacity: 0; transform: translateY(5px); } }
+  .again { position: absolute; right: 16px; bottom: 14px; padding: 6px 12px; border: 0; border-radius: 6px; font: inherit; color: inherit;
+    background: rgba(255, 255, 255, .7); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .3s; }
+  main.swarm-done .again { opacity: 1; pointer-events: auto; }
+  .again:focus-visible { outline: 2px solid #ff5b3a; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .again { display: none; } }   /* nothing to replay */
+</style>
+</head>
+<body>
+<!-- 2 · Markup: one canvas as a `scene` step. It builds itself (sweep none) over ten seconds, once the scene says it is ready (await). -->
+<main data-swarm>
+  <h1>A small island, built by its crew</h1>
+  <canvas id="island" data-swarm-step="scene" data-swarm-label="island" data-swarm-sweep="none" data-swarm-duration="10" data-swarm-await
+          role="img" aria-label="A small green island with a striped lighthouse, a cottage, five pine trees, a wooden jetty and a sailboat."></canvas>
+  <ol class="log" aria-hidden="true"></ol>
+  <button class="again" type="button">Build it again</button>
+</main>
+
+<script type="module">
+  import * as THREE from 'three';
+  import { swarmBuild, projector } from '../assets/swarm-build.js';
+
+  // 3 · The crew: the renderer is built in; the others are ours. A site's `by` names who does the work.
+  const swarm = swarmBuild({ once: 'always', trace: false, crew: { renderer: '#b49bff', mason: '#ff5b3a', carpenter: '#16181d', gardener: '#fff6e8' } });
+  const canvas = document.getElementById('island');
+  document.querySelector('.again').addEventListener('click', () => swarm.replay());
+
+  // Build progress, 0 → 1, comes from the crew. With no build coming (reduced motion, effect off) the island starts finished.
+  let build = document.documentElement.classList.contains('swarm-js') ? 0 : 1;
+  canvas.addEventListener('swarm:scene', (e) => { build = e.detail.progress; });
+
+  // The page hears every job start and finish; here it keeps a short log.
+  const log = document.querySelector('.log');
+  canvas.addEventListener('swarm:work', (e) => {
+    const { agent, phase, doing } = e.detail;
+    if (phase !== 'done' || !doing) return;
+    const li = document.createElement('li');
+    li.innerHTML = '<b></b> finished <span></span>';
+    li.querySelector('b').textContent = agent;
+    li.querySelector('span').textContent = doing;
+    log.append(li);
+  });
+
+  // 4 · An ordinary Three.js scene.
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 2000);
+  scene.add(new THREE.HemisphereLight('#eaf6ff', '#5f7a4a', 1.3));
+  const sun = new THREE.DirectionalLight('#fff1d6', 2.2);
+  sun.position.set(12, 20, 8); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16 });
+  scene.add(sun);
+
+  const mat = (color, extra) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, ...extra });
+  const mesh = (geo, material, x = 0, y = 0, z = 0) => {
+    const m = new THREE.Mesh(geo, material); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; return m;
+  };
+  const group = (x, z, ...parts) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.add(...parts); scene.add(g); return g; };
+
+  const water = mesh(new THREE.CircleGeometry(900, 64), mat('#79c2e3', { roughness: 0.4 }), 0, -0.5, 0);
+  water.rotation.x = -Math.PI / 2; scene.add(water);
+  const island = group(0, 0, mesh(new THREE.CylinderGeometry(10.2, 10.8, 1, 40), mat('#f1dca4'), 0, -0.8, 0), mesh(new THREE.CylinderGeometry(9, 9.4, 1, 40), mat('#7cbf5a'), 0, -0.5, 0));
+  const lighthouse = group(-4.5, -2.5,
+    mesh(new THREE.CylinderGeometry(0.7, 1, 6, 20), mat('#fbf7ef'), 0, 3, 0),
+    mesh(new THREE.CylinderGeometry(0.92, 0.96, 0.8, 20), mat('#ff5b3a'), 0, 1.6, 0),   // the tower narrows by 0.05 a unit: bands sit just proud of it
+    mesh(new THREE.CylinderGeometry(0.81, 0.85, 0.8, 20), mat('#ff5b3a'), 0, 3.8, 0),
+    mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.8, 12), mat('#ffe7a3', { emissive: '#ffcf4a', emissiveIntensity: 0 }), 0, 6.4, 0),
+    mesh(new THREE.ConeGeometry(0.85, 0.8, 12), mat('#ff5b3a'), 0, 7.2, 0));
+  const lamp = lighthouse.children[3].material;
+  const walls = group(2.5, -3, mesh(new THREE.BoxGeometry(3, 2, 2.4), mat('#fff6e8'), 0, 1, 0));
+  const roof = group(2.5, -3, mesh(new THREE.ConeGeometry(2.3, 1.4, 4, 1), mat('#ff5b3a'), 0, 2.7, 0));
+  roof.children[0].rotation.y = Math.PI / 4; roof.children[0].scale.set(1.05, 1, 0.85);
+  const TREES = [[5.5, 2], [-1, 4.8], [-6.2, 2.6], [0.5, -6.6], [6.2, -1.6]].map(([x, z]) =>
+    group(x, z, mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.8, 6), mat('#8a5a3b'), 0, 0.4, 0), mesh(new THREE.ConeGeometry(1, 2.4, 7), mat('#3f8f4f'), 0, 2, 0)));
+  const PLANKS = Array.from({ length: 6 }, (_, i) => group(8.6 + i * 0.75, 3.6 + i * 0.45, mesh(new THREE.BoxGeometry(0.6, 0.14, 1.6), mat('#b98556'), 0, 0.05, 0)));
+  PLANKS.forEach((p) => { p.rotation.y = -0.54; });
+  const boat = group(13.4, 6.4, mesh(new THREE.BoxGeometry(2, 0.5, 0.9), mat('#16181d'), 0, 0, 0), mesh(new THREE.CylinderGeometry(0.05, 0.05, 2, 6), mat('#8a5a3b'), 0, 1.2, 0),
+    mesh(new THREE.ConeGeometry(0.7, 1.7, 3), mat('#fff6e8'), 0.25, 1.35, 0));
+
+  // 5 · The build plan. Each job has a window in build progress (at → to); the scene grows its object through
+  //     that window, and a build site sends the agent there, following the top of whatever is going up.
+  const DUR = 10;   // seconds, as in data-swarm-duration
+  const shape = { by: 'renderer', at: 0.0, to: 0.14, doing: () => 'shaping the island' };
+  const raise = { by: 'mason', at: 0.14, to: 0.42, doing: () => 'raising the lighthouse' };
+  const plant = { by: 'gardener', at: 0.18, to: 0.6, n: TREES.length, doing: (k) => 'planting trees ' + k + '/' + TREES.length };
+  const frame = { by: 'carpenter', at: 0.2, to: 0.36, doing: () => 'framing the cottage' };
+  const top = { by: 'carpenter', at: 0.38, to: 0.48, doing: () => 'roofing the cottage' };
+  const lay = { by: 'carpenter', at: 0.52, to: 0.78, n: PLANKS.length, doing: (k) => 'laying planks ' + k + '/' + PLANKS.length };
+  const launch = { by: 'mason', at: 0.5, to: 0.68, doing: () => 'launching the boat' };
+  const light = { by: 'renderer', at: 0.84, to: 0.96, doing: () => 'lighting the lamp' };
+  const JOBS = [shape, raise, plant, frame, top, lay, launch, light];
+
+  const f = (job, p = build) => Math.min(1, Math.max(0, (p - job.at) / (job.to - job.at)));   // 0 → 1 through the job
+  const item = (job, p = build) => Math.min(job.n - 1, Math.floor(f(job, p) * job.n));       // which of n it is on
+  const part = (job, k, p = build) => Math.min(1, Math.max(0, f(job, p) * job.n - k));        // 0 → 1 for item k
+  const pop = (t) => (t <= 0 ? 0 : 1 + 2.7 * (t - 1) ** 3 + 1.7 * (t - 1) ** 2);              // ease out, a little overshoot
+
+  function grow(p) {
+    const s = 0.25 + 0.75 * pop(f(shape, p));
+    island.scale.set(s, f(shape, p) > 0 ? 1 : 0.001, s);
+    lighthouse.scale.set(1, Math.max(0.001, f(raise, p)), 1);
+    walls.scale.set(1, Math.max(0.001, f(frame, p)), 1);
+    roof.visible = f(top, p) > 0; roof.position.y = (1 - pop(f(top, p))) * 2.5;
+    TREES.forEach((t, k) => t.scale.setScalar(Math.max(0.001, pop(part(plant, k, p)))));
+    PLANKS.forEach((b, k) => { const t = part(lay, k, p); b.visible = t > 0; b.position.y = (1 - t) * 0.8; });
+    const b = f(launch, p); boat.visible = b > 0; boat.position.y = -0.9 + 0.7 * pop(b); boat.scale.setScalar(Math.max(0.001, pop(b)));
+    lamp.emissiveIntensity = 1.6 * f(light, p);
+  }
+
+  // 6 · Where each agent's cursor is, in world space: the top of whatever its job is putting up.
+  const at = (g, y) => [g.position.x, y, g.position.z];
+  shape.point = () => { const a = f(shape) * Math.PI * 2 - 1; return [Math.cos(a) * 8.5, 0, Math.sin(a) * 8.5]; };   // drawing the coast
+  raise.point = () => at(lighthouse, 7.6 * f(raise));
+  plant.point = () => at(TREES[item(plant)], 3.2 * pop(part(plant, item(plant))));
+  frame.point = () => at(walls, 2 * f(frame));
+  top.point = () => at(roof, 3.4 + roof.position.y);
+  lay.point = () => { const b = PLANKS[item(lay)]; return at(b, b.position.y + 0.1); };
+  launch.point = () => at(boat, boat.position.y + 2.2);
+  light.point = () => at(lighthouse, 6.4);
+
+  // Build sites: projector() turns the camera into a function from world points to the screen.
+  const toScreen = projector(camera, canvas);
+  JOBS.forEach((job, i) => swarm.anchor('job-' + i, () => toScreen(job.point()), {
+    at: job.at, by: job.by, hold: (job.to - job.at) * DUR, label: false, pin: false,
+    glyph: job.by === 'renderer' ? 'pen' : 'cross',
+    doing: () => job.doing(job.n ? item(job) + 1 : 0),
+  }));
+  swarm.start();
+
+  // 7 · Render: a slow orbit, framed for the screen's shape.
+  function resize() {
+    renderer.setSize(innerWidth, innerHeight, false);
+    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', resize); resize();
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let clock = 0, last = performance.now(), told = false;
+  function loop(now) {
+    clock += still ? 0 : Math.min(0.05, (now - last) / 1000); last = now;
+    if (!document.documentElement.classList.contains('swarm-js')) build = 1;   // the engine never came: show it finished
+    const d = 33 * Math.max(1, 0.9 / camera.aspect), a = 0.7 + clock * 0.04;
+    camera.position.set(3 + Math.cos(a) * d, d * 0.62, 2 + Math.sin(a) * d); camera.lookAt(3, 1, 2);   // the island and its jetty
+    grow(build);
+    renderer.render(scene, camera);
+    if (!told) { told = true; swarm.ready(canvas); }   // the scene has drawn once: the build can start
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>

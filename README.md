@@ -4,7 +4,7 @@
 
 ![swarm-build demo: agent cursors building a page](docs/demo.gif)
 
-- **Zero dependencies.** One ES module (~46 KB, ~15 KB gzipped) and one stylesheet (~2.5 KB gzipped).
+- **Zero dependencies.** One ES module (~49 KB, ~16 KB gzipped) and one stylesheet (~2.5 KB gzipped).
 - **Declarative.** You add `data-swarm` and `data-swarm-step` attributes. No timeline code.
 - **Works with 3D sites.** Three.js, React Three Fiber, Babylon, Spline, `<model-viewer>` or a raw WebGL canvas. The scene follows `swarm:scene` progress events (geometry, then materials, then lighting), can make the build wait for its models, and can send any agent to a build site inside it.
 - **Built for real sites.** It plays once per session and fast-forwards on any key, click, tap or scroll. Reduced motion turns it off, the text stays in the DOM, and the agent layers are `aria-hidden`.
@@ -20,22 +20,28 @@ A crew of sixteen builds a Three.js world just ahead of a little steam train: su
 
 [Watch the full 31-second run (MP4)](https://harnoordev.github.io/swarm-build/docs/demo-3d.mp4) · [Open it live](https://harnoordev.github.io/swarm-build/skills/swarm-build/examples/3d.html) · [Read the source](skills/swarm-build/examples/3d.html), a single HTML file.
 
-Each job is a build site: who does the work, when in the build it happens, where the cursor is right now, and what it says it is doing.
+To build your own, start with [the island starter](https://harnoordev.github.io/swarm-build/skills/swarm-build/examples/3d-starter.html) ([source](skills/swarm-build/examples/3d-starter.html)): four agents build a small island in about 200 commented lines.
+
+Each job is a build site: who does the work, when in the build it happens, where the cursor is right now, and what it says it is doing. `projector` turns your Three.js camera into the screen points the cursors follow, and every job start and finish arrives as a `swarm:work` event.
 
 ```html
 <canvas id="world" data-swarm-step="scene" data-swarm-sweep="none" data-swarm-duration="20" data-swarm-await></canvas>
 ```
 
 ```js
+import { swarmBuild, projector } from './swarm-build.js';
+
 const swarm = swarmBuild({ crew: { renderer: '#b49bff', mason: '#ff5b3a' } });
-swarm.anchor('tower', () => toScreen(towerTopAt(build)), {
+const toScreen = projector(camera, canvas);                 // world point or Object3D → screen point
+swarm.anchor('tower', () => toScreen([0, 12 * build, 0]), {
   at: 0.4,                                            // scene progress when the work starts
   by: 'mason',                                        // who does it
   hold: 1.6,                                          // seconds on site
   glyph: 'cross',                                     // the cursor it works with
-  doing: () => 'raising the tower, floor ' + floorAt(build),   // the line under its name
+  doing: () => 'raising the tower, floor ' + Math.ceil(build * 12),   // the line under its name
 });
 swarm.start();
+canvas.addEventListener('swarm:work', (e) => console.log(e.detail.agent, e.detail.phase, e.detail.doing));
 ```
 
 ## Use it
@@ -69,17 +75,18 @@ For a 3D viewport that the renderer sweeps in:
 <div id="stage" data-swarm-step="scene" data-swarm-await data-swarm-anchors="engine"></div>
 
 <script type="module">
-  import { swarmBuild } from './swarm-build.js';
+  import { swarmBuild, projector } from './swarm-build.js';
   const swarm = swarmBuild().start();
   const stage = document.getElementById('stage');
   let build = 1;                                            // finished unless the swarm says otherwise
   stage.addEventListener('swarm:scene', (e) => { build = e.detail.progress; });   // drive your scene from it
   loader.load('/plane.glb', () => swarm.ready(stage));      // sweep it in once the model is loaded
+  const toScreen = projector(camera, renderer.domElement);  // your Three.js camera and canvas
   swarm.anchor('engine', () => toScreen(engineMesh));       // the renderer follows it on screen
 </script>
 ```
 
-The full reference is in [`references/api.md`](skills/swarm-build/references/api.md). For existing intros, GSAP and SplitText, Lenis, Next.js, 3D sites and custom crews, see [`references/integration.md`](skills/swarm-build/references/integration.md).
+The full reference is in [`references/api.md`](skills/swarm-build/references/api.md). For existing intros, GSAP and SplitText, Lenis, Next.js, 3D sites and custom crews, see [`references/integration.md`](skills/swarm-build/references/integration.md). What changed between versions is in the [changelog](CHANGELOG.md).
 
 ## Install the Claude skill
 

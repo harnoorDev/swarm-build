@@ -12,6 +12,7 @@ A crew of labelled agent cursors builds the page while the visitor watches. It's
 | `assets/swarm-build.js` | Engine (ES module, no dependencies, about 42 KB unminified, 14 KB gzipped) |
 | `assets/swarm-build.css` | Styles. Every class is `sb-` prefixed and the theme hooks are CSS variables. |
 | `examples/index.html` | Working demo and reference integration |
+| `examples/3d-starter.html` | The smallest complete 3D build: four agents build an island in Three.js, in about 200 commented lines. Uses `projector`, build sites with `doing`, and `swarm:work` events for a log. Start a 3D integration here |
 | `examples/3d.html` | A Three.js world that a crew of sixteen builds just ahead of a steam train (fields, a harbour town, a mountain climb): each tag says what its agent is doing, a build log keeps score. Uses build sites with `doing`, `data-swarm-sweep="none"` and `data-swarm-await` |
 | `references/api.md` | Every attribute, option and method, plus the head snippet |
 | `references/integration.md` | Existing intros, GSAP/SplitText, smooth scroll, Next.js/React, 3D sites (Three.js, R3F, Babylon, Spline, model-viewer), custom crews |
@@ -28,7 +29,7 @@ If the assets are missing, get them from https://github.com/harnoorDev/swarm-bui
    - `fetch`: short labels and data (location, status, kicker)
    - `count`: numbers
    - `reveal`: anything that should just fade in
-   - `scene`: a 3D viewport (`<canvas>`, the `<div>` a 3D library renders into, `<spline-viewer>`, `<model-viewer>`). Add `data-swarm-await` when it loads models, and `data-swarm-anchors` for up to three points the renderer should inspect. Wire the scene to `swarm:scene` and call `swarm.ready()` (`references/integration.md`, 3D sites). If the scene can animate its own construction, use `data-swarm-sweep="none"` with a longer `data-swarm-duration`, and register build sites (`swarm.anchor(name, fn, { at, by })`) so the crew works inside it.
+   - `scene`: a 3D viewport (`<canvas>`, the `<div>` a 3D library renders into, `<spline-viewer>`, `<model-viewer>`). Add `data-swarm-await` when it loads models, and `data-swarm-anchors` for up to three points the renderer should inspect. Wire the scene to `swarm:scene` and call `swarm.ready()` (`references/integration.md`, 3D sites). If the scene can animate its own construction, use `data-swarm-sweep="none"` with a longer `data-swarm-duration`, and register build sites (`swarm.anchor(name, fn, { at, by, doing })`) so the crew works inside it. For Three.js, `projector(camera, canvas)` gives the screen point of an object or world position; give each site a `doing` line saying what the agent is building.
    - Combine steps in order when one element needs two, for example `"frame stream"`.
 3. **Pick the attack.** Optional, at most one per page, and only when the site's subject fits (AI, security, trust). Choose a word whose rewrite flips the meaning: `without>with`, `never>always`, `safe>unsafe`. The red-team deletes or types the difference, the guardrail blocks it and rolls it back, and the trace reads "blocked prompt injection". Skip it where it would read as a gimmick.
 4. **Integrate** in four parts. `examples/index.html` shows all of them.

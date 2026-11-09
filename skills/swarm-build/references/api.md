@@ -82,8 +82,11 @@ swarm.skip()        // finish the current region now
 swarm.replay()      // clear the session flag and reload from the top
 swarm.ready(el)     // a data-swarm-await scene has loaded: sweep it in (element or selector)
 swarm.anchor(name, () => ({ x, y }))   // a point inside a 3D scene, in viewport pixels (null when off screen)
-swarm.anchor(name, fn, { at, by, hold, say, label, on })   // a build site (see below)
-swarm.version       // '1.1.0'
+swarm.anchor(name, fn, { at, by, hold, say, label, on, glyph, pin, doing })   // a build site (see below)
+swarm.version       // '1.2.0'
+
+import { projector } from './swarm-build.js';
+const toScreen = projector(camera, canvas);   // Three.js world point → { x, y } on screen, for anchors (see below)
 ```
 
 ## 3D scene events
@@ -119,6 +122,31 @@ An anchor registered with `at` is a build site: while the scene is at that progr
 | `doing` | none | A line, or a function returning one, shown under the agent's name while it works ("planting pines 3/5"). Called every frame, so it can count. |
 
 `fn` is called every frame, so the agent follows a point that moves or grows (a roof as the building rises). Once its work is done, the agent stays with the point a beat, then (with more than a second to spare) heads for its next site and waits there, so a moving camera never leaves it hanging in mid-air; if the point it follows passes out of view, it slips off the nearest edge. While a scene has sites, name tags keep clear of each other: a tag that would cover another flips to a free side of its cursor. Register sites before the region builds; up to 256 per scene.
+
+### Work events
+
+While a build plays, the scene element also hears `swarm:work` (it bubbles) each time an agent starts or finishes a build site:
+
+```js
+canvas.addEventListener('swarm:work', (e) => {
+  const { site, agent, phase, doing } = e.detail;   // phase: 'start' | 'done'; doing: its `doing` line at that moment
+  if (phase === 'done') log.append(agent + ' finished ' + doing);
+});
+```
+
+Use them for a build log, sounds, or analytics. They fire in order, including when the build is fast-forwarded; a visit that does not build (repeat visit, reduced motion, effect off) fires none, so never wait on them.
+
+### Projecting points (Three.js)
+
+`projector(camera, el, { margin = 40 })` turns a Three.js camera, and the element it renders into, into the function anchors and build sites need. Give it an `Object3D`, a `{ x, y, z }` or an `[x, y, z]` in world space; it returns `{ x, y }` in viewport pixels, or `null` when the point is behind the camera or more than `margin` pixels off the element (so the agent waits, or slips off the edge). It needs no import of Three.js: any camera with column-major `projectionMatrix` and `matrixWorldInverse` works, perspective or orthographic. It is also on the default export, as `swarmBuild.projector`.
+
+```js
+const toScreen = projector(camera, renderer.domElement);
+swarm.anchor('roof', () => toScreen(roof), { at: 0.6, by: 'roofer', doing: 'roofing the barn' });
+swarm.anchor('peak', () => toScreen([0, 12 * build, 0]));   // a point that rises with the build
+```
+
+For other engines, return the screen point yourself: Babylon's `Vector3.Project`, or `getBoundingClientRect()` for a hotspot element.
 
 The app can also dispatch `swarm:ready` on the element itself instead of calling `swarm.ready(el)`.
 

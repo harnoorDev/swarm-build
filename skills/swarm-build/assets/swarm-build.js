@@ -34,7 +34,7 @@
 //   <i data-swarm-origin>                     the crew orbits this before the first build
 //   <p data-swarm-credit hidden>Built by {agents} agents while you watched.</p>
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const DEFAULT_CREW = {
   planner: '#4ee9f5', retriever: '#e7ff52', writer: '#ffb547', stylist: '#ff8fd8',
   eval: '#6aa8ff', guardrail: '#8dffb9', 'red-team': '#ff3b3b', renderer: '#b49bff',
@@ -155,6 +155,7 @@ export function swarmBuild(options = {}) {
   const loaded = new WeakSet();    // data-swarm-await scenes whose app said they are ready
   const settled = new WeakSet();   // scenes that already received their final 'ready'
   const sceneEvent = (el, progress, phase) => el.dispatchEvent(new CustomEvent('swarm:scene', { bubbles: true, detail: { progress, phase } }));
+  const workEvent = (el, detail) => el.dispatchEvent(new CustomEvent('swarm:work', { bubbles: true, detail }));
   const sceneDone = (el) => {
     if (settled.has(el) || !stepsOf(el).includes('scene')) return;
     settled.add(el);
@@ -577,6 +578,11 @@ export function swarmBuild(options = {}) {
         // stay with the site until the next job, or the end of the build (the renderer returns to its scan line)
         const stay = s.ag === a && !still ? 0 : Math.max(0, (next ? next.t : tS + D) - (s.t + 0.35 + hold));
         log(s.ag.id, s.say || 'building ' + s.name, s.t + 0.3);
+        // the page hears each job start and finish, with what the agent says it is doing at that moment
+        const says = () => { try { return String((typeof s.doing === 'function' ? s.doing() : s.doing) || ''); } catch { return ''; } };
+        const work = (phase) => () => workEvent(el, { site: s.name, agent: s.ag.id, phase, doing: says() });
+        tl.call(s.t + 0.35, work('start'));
+        tl.call(s.t + 0.35 + hold, work('done'));
         const look = next ? { ...s, next: { at: project(next.fn), off: (next.glyph || 'arrow') === 'arrow' ? 6 : 0 } } : s;
         const done = visit(s.ag, project(s.fn), s.t, hold, s.label === false ? false : s.label || s.name, o.crew[s.ag.id] || color, stay, look);
         if (s.ag === a) rBusy.push([s.t, done + stay]);
@@ -836,5 +842,38 @@ export function swarmBuild(options = {}) {
     setEnabled(on) { local.set(o.key + '-off', on ? '0' : '1'); },
   };
 }
+
+/**
+ * Turns a Three.js camera (or any camera with column-major `projectionMatrix` and `matrixWorldInverse`, as
+ * Three's are) and the element it renders into a function for build sites and anchors: give it an Object3D,
+ * a { x, y, z } or an [x, y, z] in world space and it returns the point on screen, or null when the point
+ * is behind the camera or more than `margin` pixels off the element.
+ *   swarm.anchor('roof', () => toScreen(roof), { at: 0.6, by: 'roofer' });   // toScreen = projector(camera, canvas)
+ */
+export function projector(camera, el, { margin = 40 } = {}) {
+  let box = null, boxAt = -1;
+  return (target) => {
+    if (!target || !camera) return null;
+    let x, y, z;
+    if (Array.isArray(target)) [x, y, z] = target;
+    else if (target.matrixWorld) {
+      if (target.updateWorldMatrix) target.updateWorldMatrix(true, false);
+      const e = target.matrixWorld.elements; x = e[12]; y = e[13]; z = e[14];
+    } else ({ x, y, z } = target);
+    if (![x, y, z].every(Number.isFinite)) return null;
+    if (camera.updateMatrixWorld) camera.updateMatrixWorld();   // keeps matrixWorldInverse in step with a camera moved since the last render
+    const v = camera.matrixWorldInverse.elements, m = camera.projectionMatrix.elements;
+    const vx = v[0] * x + v[4] * y + v[8] * z + v[12], vy = v[1] * x + v[5] * y + v[9] * z + v[13], vz = v[2] * x + v[6] * y + v[10] * z + v[14];
+    const w = m[3] * vx + m[7] * vy + m[11] * vz + m[15];
+    if (w <= 1e-6) return null;                                     // behind the camera
+    const nx = (m[0] * vx + m[4] * vy + m[8] * vz + m[12]) / w, ny = (m[1] * vx + m[5] * vy + m[9] * vz + m[13]) / w;
+    const now = performance.now();
+    if (!box || now - boxAt > 8) { box = (typeof el === 'function' ? el() : el).getBoundingClientRect(); boxAt = now; }   // once a frame
+    const sx = box.left + ((nx + 1) / 2) * box.width, sy = box.top + ((1 - ny) / 2) * box.height;
+    if (sx < box.left - margin || sx > box.right + margin || sy < box.top - margin || sy > box.bottom + margin) return null;
+    return { x: sx, y: sy };
+  };
+}
+swarmBuild.projector = projector;
 
 export default swarmBuild;
