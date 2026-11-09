@@ -1,5 +1,7 @@
 # swarm-build
 
+[![test](https://github.com/harnoorDev/swarm-build/actions/workflows/test.yml/badge.svg)](https://github.com/harnoorDev/swarm-build/actions/workflows/test.yml)
+
 **A page that builds itself while you watch.** A crew of labelled agent cursors frames each block with a live `W × H` badge, types the headline, restyles the accents, streams the copy like model output and counts up the stats. On 3D sites, a **renderer agent** sweeps the scene in, or the whole crew goes inside and builds it. If you want, a **red-team agent** tries to rewrite your promise, and the **guardrail agent** blocks it.
 
 ![swarm-build demo: agent cursors building a page](docs/demo.gif)
@@ -94,6 +96,15 @@ The full reference is in [`references/api.md`](skills/swarm-build/references/api
 - **claude.ai:** zip the `skills/swarm-build` folder and upload the zip as a custom skill.
 
 Then ask: *"add the swarm build effect to my site"*.
+
+## Tests
+
+```bash
+npm install --no-save playwright three && npx playwright install chromium
+node --test tests/*.test.mjs
+```
+
+`tests/projector.test.mjs` checks `projector` against Three.js, and `tests/smoke.test.mjs` builds every demo in headless Chromium and fails on any error or anything left behind. They run on every push.
 
 ## Credit
 
